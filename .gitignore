@@ -1,0 +1,22 @@
+# Secrets — JAMAIS commité
+.env
+
+# Sorties générées au runtime
+runtime/
+*.zip
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+.pytest_cache/
+.ruff_cache/
+*.egg-info/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Fichiers temporaires Excel
+~$*.xlsx

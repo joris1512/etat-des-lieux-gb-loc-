@@ -1,0 +1,43 @@
+# Cellules d'écriture dans les modèles Excel.
+#
+# ⚠️ COORDONNÉES PROVISOIRES — calées sur les MODÈLES FACTICES générés par
+#    scripts/make_placeholder_templates.py. Lundi, avec les vrais .xlsx sous les yeux,
+#    il suffit de remplacer ces coordonnées par les vraies cellules (rien d'autre à toucher).
+#
+# Pour chaque modèle :
+#   feuille  : nom de l'onglet (null = onglet actif)
+#   entete   : champ d'en-tête -> cellule
+#   mobilier : MOT-CLÉ (cherché dans la désignation du mobilier) -> cellule où reporter la quantité
+#              Le mot-clé le plus long qui correspond gagne.
+
+# Modèle pour l'état "assemblé" (regroupe N bungalows). Référencé automatiquement.
+modele_assemble: bungalow_assemble.xlsx
+
+defaut:
+  feuille: null
+  entete:
+    client: B2
+    titre_chantier: B3
+    adresse: B4
+    code_postal: B5
+    ville: B6
+  mobilier:
+    TABLE: E10
+    CHAISE: E11
+    BANC: E12
+    ARMOIRE: E13
+    FAUTEUIL: E14
+    CAISSON: E15
+    REFRIGERATEUR: E16
+    MICRO ONDES: E17
+    EVIER: E18
+
+# Surcharges par modèle (vide = hérite de `defaut`).
+modeles:
+  bungalow_15m2.xlsx: {}
+  bungalow_assemble.xlsx: {}
+  sanitaire_2wc_2d_2u.xlsx:
+    # Un sanitaire n'a pas de mobilier de bureau : on ne reporte que l'en-tête.
+    mobilier: {}
+  sanitaire_2wc_pmr.xlsx:
+    mobilier: {}

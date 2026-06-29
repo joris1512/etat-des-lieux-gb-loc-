@@ -1,0 +1,142 @@
+{
+  "entete": {
+    "client": "EIFFAGE TRX MARITIMES FLUVIAUX",
+    "numero_client": "007433",
+    "interlocuteur": "Mme ENOLA COFFIN",
+    "commercial": "CELINE BRARD",
+    "adresse_client": "3 A 7 PLACE DE L'EUROPE",
+    "code_postal_client": "78140",
+    "ville_client": "VELIZY VILLACOUBLAY",
+    "numero_offre": "GB00007589/L",
+    "date_devis": "03/12/2025",
+    "titre_chantier": "CHANTIER ETMF / BESSAC",
+    "adresse": "1 plage des Casernes",
+    "code_postal": "40510",
+    "ville": "SEIGNOSSE"
+  },
+  "articles": [
+    {
+      "texte_ligne": "BUNGALOW 15m2 BATISO",
+      "bloc": "VESTIAIRE HOMMES",
+      "est_bungalow": true,
+      "quantite": 1,
+      "mobilier": [
+        { "designation": "ARMOIRE DOUBLE VESTIAIRE", "quantite": 10 },
+        { "designation": "BANC PLIANT 1.60M BOIS STRUCTURE METAL", "quantite": 2 }
+      ]
+    },
+    {
+      "texte_ligne": "BUNGALOW 15 M² 2WC 2D 2U+LAVE MAINS 2PTS",
+      "bloc": "SANITAIRES",
+      "est_bungalow": false,
+      "quantite": 1,
+      "mobilier": []
+    },
+    {
+      "texte_ligne": "BUNGALOW 15m2 BATISO",
+      "bloc": "REFECTOIRE",
+      "est_bungalow": true,
+      "quantite": 1,
+      "mobilier": []
+    },
+    {
+      "texte_ligne": "BUNGALOW 15m2 BATISO",
+      "bloc": "REFECTOIRE",
+      "est_bungalow": true,
+      "quantite": 1,
+      "mobilier": [
+        { "designation": "TABLE MODULAIRE RECT. 160X80", "quantite": 4 },
+        { "designation": "BANC PLIANT 1.60M BOIS STRUCTURE METAL", "quantite": 8 },
+        { "designation": "ACCESSOIRE REFRIGERATEUR", "quantite": 2 },
+        { "designation": "ACCESSOIRE MICRO ONDES", "quantite": 2 },
+        { "designation": "ACCESSOIRE EVIER + CHAUFFE EAU", "quantite": 2 }
+      ]
+    },
+    {
+      "texte_ligne": "BUNGALOW 15m2 BATISO",
+      "bloc": "2 BUREAUX INDEPENDANTS",
+      "est_bungalow": true,
+      "quantite": 1,
+      "mobilier": []
+    },
+    {
+      "texte_ligne": "BUNGALOW 15m2 BATISO",
+      "bloc": "2 BUREAUX INDEPENDANTS",
+      "est_bungalow": true,
+      "quantite": 1,
+      "mobilier": [
+        { "designation": "TABLE MODULAIRE RECT. 160X80", "quantite": 4 },
+        { "designation": "FAUTEUIL DJANGO RESILLE A ROULETTES", "quantite": 4 },
+        { "designation": "CAISSON MOBILE", "quantite": 4 },
+        { "designation": "ARMOIRE HAUTE PORTES BATTANTES", "quantite": 2 }
+      ]
+    },
+    {
+      "texte_ligne": "BUNGALOW 15m2 BATISO",
+      "bloc": "1 BUREAU INDEPENDANT",
+      "est_bungalow": true,
+      "quantite": 1,
+      "mobilier": [
+        { "designation": "TABLE MODULAIRE RECT. 160X80", "quantite": 2 },
+        { "designation": "FAUTEUIL DJANGO RESILLE A ROULETTES", "quantite": 2 },
+        { "designation": "CAISSON MOBILE", "quantite": 2 },
+        { "designation": "ARMOIRE HAUTE PORTES BATTANTES", "quantite": 1 }
+      ]
+    },
+    {
+      "texte_ligne": "BUNGALOW 15m2 BATISO",
+      "bloc": "2 BUREAUX",
+      "est_bungalow": true,
+      "quantite": 1,
+      "mobilier": []
+    },
+    {
+      "texte_ligne": "BUNGALOW 15m2 BATISO",
+      "bloc": "2 BUREAUX",
+      "est_bungalow": true,
+      "quantite": 1,
+      "mobilier": [
+        { "designation": "TABLE MODULAIRE RECT. 160X80", "quantite": 5 },
+        { "designation": "FAUTEUIL DJANGO RESILLE A ROULETTES", "quantite": 4 },
+        { "designation": "CAISSON MOBILE", "quantite": 4 },
+        { "designation": "ARMOIRE HAUTE PORTES BATTANTES", "quantite": 2 },
+        { "designation": "ARMOIRE BASSE PORTES BATTANTES 1000*800*380", "quantite": 1 }
+      ]
+    },
+    {
+      "texte_ligne": "BUNGALOW 15m2 BATISO 2WC DONT 1 PMR CE15",
+      "bloc": "H/F WC",
+      "est_bungalow": false,
+      "quantite": 1,
+      "mobilier": []
+    },
+    {
+      "texte_ligne": "BUNGALOW 15m2 BATISO",
+      "bloc": "SALLE DE REUNION",
+      "est_bungalow": true,
+      "quantite": 1,
+      "mobilier": []
+    },
+    {
+      "texte_ligne": "BUNGALOW 15m2 BATISO",
+      "bloc": "SALLE DE REUNION",
+      "est_bungalow": true,
+      "quantite": 1,
+      "mobilier": [
+        { "designation": "TABLE MODULAIRE RECT. 160X80", "quantite": 4 },
+        { "designation": "CHAISE COQUE", "quantite": 20 },
+        { "designation": "ARMOIRE BASSE PORTES BATTANTES 1000*800*380", "quantite": 1 }
+      ]
+    },
+    {
+      "texte_ligne": "BUNGALOW 15m2 BATISO",
+      "bloc": "GARDIEN",
+      "est_bungalow": true,
+      "quantite": 1,
+      "mobilier": [
+        { "designation": "TABLE MODULAIRE RECT. 160X80", "quantite": 1 },
+        { "designation": "CHAISE COQUE", "quantite": 1 }
+      ]
+    }
+  ]
+}

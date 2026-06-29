@@ -1,0 +1,14 @@
+# Table de correspondance TEXTE de ligne de devis -> MODÈLE Excel.
+# - pattern   : texte recherché dans la ligne du devis (comparé après normalisation :
+#               majuscules, accents retirés, ponctuation -> espaces). Le motif le PLUS LONG
+#               qui correspond gagne (donc un sanitaire spécifique l'emporte sur un bungalow générique).
+# - modele    : nom du fichier .xlsx dans templates/
+# - categorie : bungalow | sanitaire | autre  (informatif)
+# - est_bungalow : true pour un bungalow standard 15m2 ASSEMBLABLE ; false pour un sanitaire/spécial.
+#
+# ⚠️ STARTER déduit du devis EIFFAGE. À COMPLÉTER lundi avec les ~25 entrées officielles
+#    (et les vrais noms de fichiers des modèles). N'inventez aucune correspondance ici.
+pattern,modele,categorie,est_bungalow
+BUNGALOW 15m2 BATISO 2WC DONT 1 PMR,sanitaire_2wc_pmr.xlsx,sanitaire,false
+BUNGALOW 15 M2 2WC 2D 2U,sanitaire_2wc_2d_2u.xlsx,sanitaire,false
+BUNGALOW 15m2 BATISO,bungalow_15m2.xlsx,bungalow,true
