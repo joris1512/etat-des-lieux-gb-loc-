@@ -21,6 +21,13 @@ from openpyxl.utils.cell import coordinate_to_tuple
 RACINE = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(RACINE))
 
+# Console Windows (cp1252) : sortie en UTF-8 pour éviter tout plantage d'encodage.
+for _flux in (sys.stdout, sys.stderr):
+    try:
+        _flux.reconfigure(encoding="utf-8")
+    except (AttributeError, ValueError):
+        pass
+
 from app.config import CONFIG_CELLULES, CORRESPONDANCES_CSV, TEMPLATES_DIR  # noqa: E402
 from app.correspondance import charger_correspondances  # noqa: E402
 
@@ -40,6 +47,7 @@ def _cfg_modele(cfg: dict, modele: str) -> dict:
     return {
         "entete": {**(defaut.get("entete") or {}), **(surcharge.get("entete") or {})},
         "mobilier": surcharge["mobilier"] if "mobilier" in surcharge else (defaut.get("mobilier") or {}),
+        "fonction": surcharge.get("fonction", defaut.get("fonction")),
     }
 
 
@@ -80,6 +88,17 @@ def construire(modele: str, cfg: dict) -> Workbook:
             cell = ws[cellule]
             cell.fill = jaune
             cell.border = bord
+
+    # Ligne « fonction » (cas des bungalows) : sur le vrai modèle le préparateur entoure
+    # le bon mot ; l'outil la remplacera par la fonction retenue (ex. « VESTIAIRE »).
+    fonction_cell = mc.get("fonction")
+    if fonction_cell:
+        r, _ = coordinate_to_tuple(fonction_cell)
+        ws.cell(row=r, column=1, value="Fonction").font = gras
+        cell = ws[fonction_cell]
+        cell.value = "BUREAU / SALLE DE REUNION / VESTIAIRE / REFECTOIRE"
+        cell.fill = jaune
+        cell.border = bord
 
     # Bloc « ne pas pré-remplir » pour matérialiser ce que l'outil NE touche pas.
     ws["A22"] = "État réel / Réserves / Signatures — NON pré-rempli (rempli à la main)"

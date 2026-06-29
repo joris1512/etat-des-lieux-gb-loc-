@@ -50,8 +50,28 @@ def test_generation_complete_produit_17_fichiers_et_zip(tmp_path):
     assert premier.active["B2"].value == "EIFFAGE TRX MARITIMES FLUVIAUX"
 
 
-def test_aucune_fonction_ni_signature_remplie():
+def test_aucune_signature_remplie():
     rapport, job_dir = generer(None, utiliser_fixture=True)
     wb = load_workbook(job_dir / rapport.fichiers[0])
     # La zone "non pré-remplie" du modèle factice reste son libellé d'origine (jamais écrasée).
     assert "NON pré-rempli" in str(wb.active["A22"].value)
+
+
+def test_fonction_bungalow_ecrite_dans_les_fichiers_produits():
+    rapport, job_dir = generer(None, utiliser_fixture=True)
+    # Plan déterministe : on relie chaque fichier produit à son état pour connaître la fonction.
+    par_nom = {e.nom_fichier: e for e in construire_plan(charger_fixture()).etats}
+
+    verifies = 0
+    for nom in rapport.fichiers:
+        etat = par_nom[nom]
+        wb = load_workbook(job_dir / nom)
+        cellule = wb.active["B20"].value
+        if etat.fonction:
+            # La fonction retenue REMPLACE la ligne d'origine (mot seul, ex. « VESTIAIRE »).
+            assert cellule == etat.fonction
+            verifies += 1
+        elif cellule is not None:
+            # Pas de fonction reconnue (ex. GARDIEN) : la ligne d'origine reste intacte.
+            assert "/" in str(cellule)
+    assert verifies >= 4  # au moins les 4 blocs assemblés (réfectoire, 2x bureaux, réunion)

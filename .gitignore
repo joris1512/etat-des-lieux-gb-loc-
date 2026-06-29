@@ -20,3 +20,7 @@ Thumbs.db
 
 # Fichiers temporaires Excel
 ~$*.xlsx
+
+# Modèles réels convertis (.xls -> .xlsx) : copies dérivées des originaux du client,
+# régénérables, gardées hors dépôt.
+modeles_reels/

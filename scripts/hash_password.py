@@ -13,6 +13,13 @@ import getpass
 import sys
 from pathlib import Path
 
+# Console Windows (cp1252) : sortie en UTF-8 pour éviter tout plantage d'encodage.
+for _flux in (sys.stdout, sys.stderr):
+    try:
+        _flux.reconfigure(encoding="utf-8")
+    except (AttributeError, ValueError):
+        pass
+
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from app.securite import hacher  # noqa: E402

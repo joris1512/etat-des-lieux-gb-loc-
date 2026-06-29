@@ -31,6 +31,7 @@ def _cfg_modele(modele: str) -> dict:
     surcharge = (cfg.get("modeles", {}) or {}).get(modele, {}) or {}
     resolu = {
         "feuille": surcharge.get("feuille", defaut.get("feuille")),
+        "fonction": surcharge.get("fonction", defaut.get("fonction")),
         "entete": {**(defaut.get("entete") or {}), **(surcharge.get("entete") or {})},
     }
     # Pour le mobilier, une surcharge explicite (même vide) REMPLACE le défaut.
@@ -80,6 +81,14 @@ def remplir_etat(
         valeur = valeurs_entete.get(champ)
         if valeur and cellule:
             ws[cellule] = valeur
+
+    # --- Fonction du bungalow ---
+    # On REMPLACE la ligne « BUREAU / SALLE DE REUNION / VESTIAIRE / REFECTOIRE » par la
+    # fonction retenue (ex. « VESTIAIRE »). Rien n'est écrit si la fonction est indéterminée
+    # (le modèle garde alors sa ligne d'origine, à renseigner à la main).
+    cellule_fonction = cfg.get("fonction")
+    if cellule_fonction and etat.fonction:
+        ws[cellule_fonction] = etat.fonction
 
     # --- Mobilier (somme par cellule) ---
     table_mobilier = cfg.get("mobilier") or {}

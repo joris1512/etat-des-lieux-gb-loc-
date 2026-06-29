@@ -83,16 +83,24 @@ Routes clés : `/` (UI), `/analyser`, `/generer`, `/generer-revise`, `/telecharg
   **Tableau de bord** ; **Historique** (recherche + re-téléchargement) ; **Clients** (recherche →
   fiche → dossier **Chantiers** → contenu du chantier : devis / états & documents / historique) ;
   **Statistiques** ; **Étape de révision** (analyser → corriger → générer) ; **Sécurité renforcée**.
+- v2.1 : **auto-cochage de la fonction du bungalow**. Détection `bloc → fonction` config-driven dans
+  `app/fonctions.py` + section `fonctions:` de `config/cellules.yaml` ; report sur `EtatDesLieux.fonction`
+  (assemblage) ; **remplacement** de la cellule fonction dans `remplissage.py` (clé `fonction:` par modèle).
+  Testé (62 tests verts, ruff clean) et **validé sur le vrai modèle bungalow** (cellules réelles E5/E7/A9).
 
 **Reste à faire (prochaines briques) :**
-1. **Auto-cocher la fonction du bungalow** (vestiaire/réfectoire/bureau/salle de réunion) dans l'Excel.
-   → BLOQUÉ tant qu'on n'a pas les **vrais modèles .xlsx + les cellules exactes** (attendus « lundi »).
-   Préparer la logique : mapping bloc → fonction → cellule dans `config/cellules.yaml` + écriture dans `remplissage.py`.
-2. **Brancher les vrais fichiers** (attendus du client) :
-   - déposer les vrais `.xlsx` dans `templates/` (ou via la bibliothèque) ;
-   - renseigner les **cellules exactes** dans `config/cellules.yaml` ;
-   - compléter `correspondances.csv` (~25 entrées texte→modèle) ;
+1. **Brancher les vrais modèles.** Les `.xls` du client (dans `P:\Joris\etat des lieux`, **originaux à ne
+   jamais modifier**) ont été **convertis en `.xlsx`** dans `modeles_reels/` (via Excel COM ; 2 « NOTICE
+   UTILISATION » exclues). Migration à finaliser :
+   - choisir le **fichier bungalow canonique** + mapper ses onglets (`bungalow`, `BUNGALOWS ASSEMBLES`,
+     `bungalow avec mobilier`) ; gérer la **sélection d'onglet** selon le cas (individuel / assemblé / avec mobilier) ;
+   - réécrire `correspondances.csv` (vrais noms de fichiers, ~25 entrées texte → modèle) ;
+   - renseigner les **cellules réelles** dans `config/cellules.yaml` (en-tête `E5`/`E7`, fonction `A9`/`B9`/`B12` selon onglet) ;
    - intégrer les **dossiers CSV** fournis (import à concevoir selon leur format).
+   ⚠️ Pré-remplissage voulu sur ces modèles = **Client + Chantier + fonction** uniquement (pas le n° de bungalow,
+   pas de quantités de mobilier ; le nom du modèle indique « avec / sans mobilier »).
+2. **Import .xls dans la bibliothèque** (optionnel) : l'app n'accepte que `.xlsx`. Soit conversion en amont
+   (faite via Excel COM), soit conversion automatique à l'upload (dépendrait d'Excel sur le serveur, plus fragile).
 3. **Intégration CRM Mistral / S@PHIR** : voir `INTEGRATION_MISTRAL.md`. Client en **S@PHIR cloud**,
    pas d'accès API/données pour l'instant. Point de branchement prêt : couche d'enrichissement de `db.py`
    (ajouter `enrichir_depuis_crm()` + `app/connecteurs/mistral.py` + endpoint `/crm/import` quand l'accès arrive).
@@ -101,3 +109,10 @@ Routes clés : `/` (UI), `/analyser`, `/generer`, `/generer-revise`, `/telecharg
 - Le dossier projet contient un espace dans son chemin parent → toujours **quoter** les chemins en shell.
 - Pas de hot-reload en prod : après modif Python, **redémarrer** uvicorn.
 - `runtime/` (base + sorties) est **gitignoré** : il ne se transfère pas ; recréer la démo avec `scripts/seed_demo.py`.
+- **Console Windows (cp1252)** : les scripts CLI qui impriment des caractères non-latin1 (✔, →, …)
+  **forcent `sys.stdout`/`stderr` en UTF-8** (bloc `reconfigure` en tête de `seed_demo.py`, `diagnostic.py`,
+  `make_placeholder_templates.py`, `hash_password.py`). Garder ce garde si on ajoute un script. Côté app,
+  toutes les lectures fichier utilisent `encoding="utf-8"` explicite (ne pas l'oublier).
+- **Déployer sur un disque LOCAL** (ex. `C:\GB\…`), **pas un partage réseau** : SQLite en mode WAL et la
+  tâche planifiée exécutée en compte **SYSTEM** ne sont pas fiables sur un partage SMB (le poste de dev
+  tourne sur `\\srv\…` via `P:`, ce qui fonctionne en mono-utilisateur mais reste déconseillé en prod).

@@ -13,8 +13,23 @@
 # Modèle pour l'état "assemblé" (regroupe N bungalows). Référencé automatiquement.
 modele_assemble: bungalow_assemble.xlsx
 
+# Fonctions de bungalow reconnues -> texte canonique reporté sur la ligne « fonction ».
+# Pour chaque fonction, les mots-clés cherchés dans le « bloc » du devis (après normalisation :
+# majuscules / sans accents). Le 1er motif trouvé gagne : l'ordre fixe donc la priorité.
+fonctions:
+  - texte: SALLE DE REUNION
+    motifs: [REUNION]
+  - texte: VESTIAIRE
+    motifs: [VESTIAIRE]
+  - texte: REFECTOIRE
+    motifs: [REFECTOIRE]
+  - texte: BUREAU
+    motifs: [BUREAU]
+
 defaut:
   feuille: null
+  # Cellule de la ligne « fonction » (null = ce modèle n'a pas de fonction à reporter).
+  fonction: null
   entete:
     client: B2
     titre_chantier: B3
@@ -34,8 +49,10 @@ defaut:
 
 # Surcharges par modèle (vide = hérite de `defaut`).
 modeles:
-  bungalow_15m2.xlsx: {}
-  bungalow_assemble.xlsx: {}
+  bungalow_15m2.xlsx:
+    fonction: B20
+  bungalow_assemble.xlsx:
+    fonction: B20
   sanitaire_2wc_2d_2u.xlsx:
     # Un sanitaire n'a pas de mobilier de bureau : on ne reporte que l'en-tête.
     mobilier: {}

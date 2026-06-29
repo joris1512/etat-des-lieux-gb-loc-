@@ -85,6 +85,13 @@ class EtatDesLieux(BaseModel):
     modele: str = Field(description="Nom du fichier modèle .xlsx à utiliser.")
     type_etat: str = Field(description="'individuel' | 'assemble' | 'sanitaire'.")
     bloc: str | None = Field(default=None, description="Unité fonctionnelle d'origine.")
+    fonction: str | None = Field(
+        default=None,
+        description=(
+            "Fonction du bungalow déduite du bloc (BUREAU / SALLE DE REUNION / VESTIAIRE / "
+            "REFECTOIRE), reportée sur la ligne « fonction » du modèle. None si indéterminée."
+        ),
+    )
     texte_ligne: str = Field(description="Texte de la ligne de devis à l'origine de l'état.")
     nb_modules: int = Field(default=1, description="Nombre de modules regroupés (N pour un assemblé).")
     index_module: int | None = Field(

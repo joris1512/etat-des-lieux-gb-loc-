@@ -14,6 +14,14 @@ import socket
 import sys
 from pathlib import Path
 
+# Console Windows (cp1252) : éviter un plantage d'encodage sur les caractères non-latin1
+# imprimés (→, etc.). On force la sortie en UTF-8 quand c'est possible.
+for _flux in (sys.stdout, sys.stderr):
+    try:
+        _flux.reconfigure(encoding="utf-8")
+    except (AttributeError, ValueError):
+        pass
+
 RACINE = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(RACINE))
 

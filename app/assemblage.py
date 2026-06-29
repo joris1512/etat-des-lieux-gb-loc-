@@ -18,6 +18,7 @@ import yaml
 
 from app.config import CONFIG_CELLULES
 from app.correspondance import est_prestation, trouver_modele
+from app.fonctions import detecter_fonction
 from app.models import (
     ArticleDevis,
     EtatDesLieux,
@@ -92,6 +93,7 @@ def construire_plan(extraction: ExtractionDevis) -> PlanGeneration:
             return
         articles = [a for a, _ in run]
         bloc = run_bloc
+        fonction = detecter_fonction(bloc)
         mobilier = _fusionner_mobilier(articles)
         n = len(articles)
         slug = _slug(bloc)
@@ -102,6 +104,7 @@ def construire_plan(extraction: ExtractionDevis) -> PlanGeneration:
                     modele=modele_assemble,
                     type_etat="assemble",
                     bloc=bloc,
+                    fonction=fonction,
                     texte_ligne=articles[0].texte_ligne,
                     nb_modules=n,
                     mobilier=mobilier,
@@ -116,6 +119,7 @@ def construire_plan(extraction: ExtractionDevis) -> PlanGeneration:
                         modele=modele_i,
                         type_etat="individuel",
                         bloc=bloc,
+                        fonction=fonction,
                         texte_ligne=art_i.texte_ligne,
                         nb_modules=1,
                         index_module=i,
@@ -130,6 +134,7 @@ def construire_plan(extraction: ExtractionDevis) -> PlanGeneration:
                     modele=run[0][1],
                     type_etat="individuel",
                     bloc=bloc,
+                    fonction=fonction,
                     texte_ligne=articles[0].texte_ligne,
                     nb_modules=1,
                     mobilier=mobilier,
