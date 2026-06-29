@@ -45,7 +45,8 @@ def _cfg_modele(cfg: dict, modele: str) -> dict:
     defaut = cfg.get("defaut", {}) or {}
     surcharge = (cfg.get("modeles", {}) or {}).get(modele, {}) or {}
     return {
-        "entete": {**(defaut.get("entete") or {}), **(surcharge.get("entete") or {})},
+        "feuille": surcharge.get("feuille", defaut.get("feuille")),
+        "entete": surcharge["entete"] if "entete" in surcharge else (defaut.get("entete") or {}),
         "mobilier": surcharge["mobilier"] if "mobilier" in surcharge else (defaut.get("mobilier") or {}),
         "fonction": surcharge.get("fonction", defaut.get("fonction")),
     }
@@ -67,6 +68,8 @@ def construire(modele: str, cfg: dict) -> Workbook:
     ws.row_dimensions[1].height = 22
 
     mc = _cfg_modele(cfg, modele)
+    if mc.get("feuille"):
+        ws.title = str(mc["feuille"])[:31]  # nom d'onglet aligné sur cellules.yaml
 
     # En-tête : libellé en colonne A, valeur dans la cellule prévue.
     for champ, cellule in (mc.get("entete") or {}).items():
@@ -119,8 +122,13 @@ def main() -> None:
     cfg = yaml.safe_load(CONFIG_CELLULES.read_text(encoding="utf-8"))
     TEMPLATES_DIR.mkdir(parents=True, exist_ok=True)
     for modele in sorted(noms_modeles(cfg)):
+        cible = TEMPLATES_DIR / modele
+        if cible.exists():
+            # Ne JAMAIS écraser un vrai modèle déjà déposé (factices = bootstrap seulement).
+            print(f"  déjà présent (gardé) : {modele}")
+            continue
         wb = construire(modele, cfg)
-        wb.save(TEMPLATES_DIR / modele)
+        wb.save(cible)
         print(f"  modèle factice : {modele}")
     print(f"OK — {TEMPLATES_DIR}")
 

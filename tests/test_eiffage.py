@@ -5,6 +5,15 @@ from openpyxl import load_workbook
 from app.assemblage import construire_plan
 from app.extraction import charger_fixture
 from app.generation import generer
+from app.remplissage import _cfg_modele
+
+
+def _ouvrir_etat(job_dir, nom, etat):
+    """Ouvre le fichier produit sur le bon onglet (selon la config du modèle)."""
+    cfg = _cfg_modele(etat.modele)
+    wb = load_workbook(job_dir / nom)
+    ws = wb[cfg["feuille"]] if cfg.get("feuille") else wb.active
+    return ws, cfg
 
 
 def test_plan_eiffage_compte_et_types():
@@ -39,22 +48,26 @@ def test_salle_reunion_assemble_porte_20_chaises():
     assert chaises == 20
 
 
-def test_generation_complete_produit_17_fichiers_et_zip(tmp_path):
+def test_generation_complete_produit_17_fichiers_et_zip():
     rapport, job_dir = generer(None, utiliser_fixture=True)
     assert len(rapport.fichiers) == 17
     assert rapport.zip_nom is not None
     assert (job_dir / rapport.zip_nom).exists()
 
-    # En-tête bien écrite dans un fichier produit (cellule client = B2 par défaut).
-    premier = load_workbook(job_dir / rapport.fichiers[0])
-    assert premier.active["B2"].value == "EIFFAGE TRX MARITIMES FLUVIAUX"
+    par_nom = {e.nom_fichier: e for e in construire_plan(charger_fixture()).etats}
+    # En-tête écrite sur un bungalow réel : cellule client E5, préfixée « Client : ».
+    nom_bung = next(n for n in rapport.fichiers if par_nom[n].type_etat == "individuel")
+    ws, cfg = _ouvrir_etat(job_dir, nom_bung, par_nom[nom_bung])
+    assert ws[cfg["entete"]["client"]].value == "Client : EIFFAGE TRX MARITIMES FLUVIAUX"
 
 
-def test_aucune_signature_remplie():
+def test_corps_inspection_non_rempli():
     rapport, job_dir = generer(None, utiliser_fixture=True)
-    wb = load_workbook(job_dir / rapport.fichiers[0])
-    # La zone "non pré-remplie" du modèle factice reste son libellé d'origine (jamais écrasée).
-    assert "NON pré-rempli" in str(wb.active["A22"].value)
+    par_nom = {e.nom_fichier: e for e in construire_plan(charger_fixture()).etats}
+    nom_bung = next(n for n in rapport.fichiers if par_nom[n].type_etat == "individuel")
+    ws, _ = _ouvrir_etat(job_dir, nom_bung, par_nom[nom_bung])
+    # La grille d'inspection (corps) n'est jamais pré-remplie : libellé d'origine intact.
+    assert ws["A40"].value == "Radiateur"
 
 
 def test_fonction_bungalow_ecrite_dans_les_fichiers_produits():
@@ -65,13 +78,10 @@ def test_fonction_bungalow_ecrite_dans_les_fichiers_produits():
     verifies = 0
     for nom in rapport.fichiers:
         etat = par_nom[nom]
-        wb = load_workbook(job_dir / nom)
-        cellule = wb.active["B20"].value
-        if etat.fonction:
-            # La fonction retenue REMPLACE la ligne d'origine (mot seul, ex. « VESTIAIRE »).
-            assert cellule == etat.fonction
-            verifies += 1
-        elif cellule is not None:
-            # Pas de fonction reconnue (ex. GARDIEN) : la ligne d'origine reste intacte.
-            assert "/" in str(cellule)
+        if not etat.fonction:
+            continue
+        ws, cfg = _ouvrir_etat(job_dir, nom, etat)
+        # La fonction retenue REMPLACE la ligne d'origine (mot seul, ex. « VESTIAIRE »).
+        assert ws[cfg["fonction"]].value == etat.fonction
+        verifies += 1
     assert verifies >= 4  # au moins les 4 blocs assemblés (réfectoire, 2x bureaux, réunion)

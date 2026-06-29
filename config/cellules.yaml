@@ -49,10 +49,22 @@ defaut:
 
 # Surcharges par modèle (vide = hérite de `defaut`).
 modeles:
+  # --- Bungalows : VRAIS modèles (onglets extraits de « ENLEVEMENT ROULANTE.xlsx ») ---
+  # En-tête : le libellé fait partie de la cellule -> préfixe via entete_format.
+  # Fonction : on REMPLACE la ligne « BUREAU / SALLE DE REUNION / VESTIAIRE / REFECTOIRE ».
   bungalow_15m2.xlsx:
-    fonction: B20
+    feuille: bungalow
+    fonction: A9
+    entete: {client: E5, titre_chantier: E7}
+    entete_format: {client: "Client : {valeur}", titre_chantier: "Chantier : {valeur}"}
+    mobilier: {}
   bungalow_assemble.xlsx:
-    fonction: B20
+    feuille: BUNGALOWS ASSEMBLES
+    fonction: B12
+    entete: {client: E5, titre_chantier: E7}
+    entete_format: {client: "Client : {valeur}", titre_chantier: "Chantier : {valeur}"}
+    mobilier: {}
+  # --- Sanitaires : ENCORE sur modèles factices (cellules réelles à brancher après vérif) ---
   sanitaire_2wc_2d_2u.xlsx:
     # Un sanitaire n'a pas de mobilier de bureau : on ne reporte que l'en-tête.
     mobilier: {}

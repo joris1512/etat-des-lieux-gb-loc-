@@ -32,9 +32,17 @@ def _cfg_modele(modele: str) -> dict:
     resolu = {
         "feuille": surcharge.get("feuille", defaut.get("feuille")),
         "fonction": surcharge.get("fonction", defaut.get("fonction")),
-        "entete": {**(defaut.get("entete") or {}), **(surcharge.get("entete") or {})},
     }
-    # Pour le mobilier, une surcharge explicite (même vide) REMPLACE le défaut.
+    # En-tête, format d'en-tête et mobilier : une surcharge explicite (même vide) REMPLACE le
+    # défaut (les vrais modèles ont leurs propres cellules, à ne pas fusionner avec le défaut).
+    resolu["entete"] = (
+        surcharge["entete"] if "entete" in surcharge else (defaut.get("entete") or {})
+    )
+    resolu["entete_format"] = (
+        surcharge["entete_format"]
+        if "entete_format" in surcharge
+        else (defaut.get("entete_format") or {})
+    )
     resolu["mobilier"] = (
         surcharge["mobilier"] if "mobilier" in surcharge else (defaut.get("mobilier") or {})
     )
@@ -77,10 +85,14 @@ def remplir_etat(
         "ville": entete.ville,
         "numero_offre": entete.numero_offre,
     }
+    formats = cfg.get("entete_format") or {}
     for champ, cellule in (cfg.get("entete") or {}).items():
         valeur = valeurs_entete.get(champ)
         if valeur and cellule:
-            ws[cellule] = valeur
+            # Sur les vrais modèles, le libellé fait partie de la cellule (ex. « Client : … ») :
+            # un gabarit « Client : {valeur} » reconstitue le libellé + la valeur.
+            gabarit = formats.get(champ)
+            ws[cellule] = gabarit.format(valeur=valeur) if gabarit else valeur
 
     # --- Fonction du bungalow ---
     # On REMPLACE la ligne « BUREAU / SALLE DE REUNION / VESTIAIRE / REFECTOIRE » par la
