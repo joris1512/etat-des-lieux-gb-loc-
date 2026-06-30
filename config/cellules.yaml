@@ -82,3 +82,79 @@ modeles:
     entete: {client: E5, titre_chantier: E7}
     entete_format: {client: "CLIENT : {valeur}", titre_chantier: "CHANTIER : {valeur}"}
     mobilier: {}
+  # --- Sanitaires réels (intégration en lot, motifs à valider) ---
+  wc_1_pmr.xlsx:
+    feuille: "WC"
+    entete: {client: E5, titre_chantier: E7}
+    entete_format: {client: "CLIENT : {valeur}", titre_chantier: "CHANTIER : {valeur}"}
+    mobilier: {}
+  wc_2.xlsx:
+    feuille: "2WCH"
+    entete: {client: E5, titre_chantier: E7}
+    entete_format: {client: "CLIENT : {valeur}", titre_chantier: "CHANTIER : {valeur}"}
+    mobilier: {}
+  wc_3.xlsx:
+    feuille: "WC"
+    entete: {client: E5, titre_chantier: E7}
+    entete_format: {client: "CLIENT : {valeur}", titre_chantier: "CHANTIER : {valeur}"}
+    mobilier: {}
+  urinoirs_4.xlsx:
+    feuille: "BLOC 4 URINOIRS"
+    entete: {client: F5, titre_chantier: F7}
+    entete_format: {client: "CLIENT : {valeur}", titre_chantier: "CHANTIER : {valeur}"}
+    mobilier: {}
+  urinoirs_7.xlsx:
+    feuille: "7 URINOIRS"
+    entete: {client: E5, titre_chantier: E6}
+    entete_format: {client: "CLIENT : {valeur}", titre_chantier: "CHANTIER : {valeur}"}
+    mobilier: {}
+  lave_mains.xlsx:
+    feuille: "BLOC 4 URINOIRS"
+    entete: {client: F5, titre_chantier: F7}
+    entete_format: {client: "CLIENT : {valeur}", titre_chantier: "CHANTIER : {valeur}"}
+    mobilier: {}
+  roulante_vip_2wc.xlsx:
+    feuille: "2WCH"
+    entete: {client: I5, titre_chantier: I6}
+    entete_format: {client: "CLIENT : {valeur}", titre_chantier: "CHANTIER : {valeur}"}
+    mobilier: {}
+  sanitaire_2wc_2ur.xlsx:
+    feuille: "2WC_2UR - W99375"
+    entete: {client: E5, titre_chantier: E7}
+    entete_format: {client: "CLIENT : {valeur}", titre_chantier: "CHANTIER : {valeur}"}
+    mobilier: {}
+  urinoir_feminin.xlsx:
+    feuille: "URINOIR FEMININ"
+    entete: {client: E5, titre_chantier: E7}
+    entete_format: {client: "CLIENT : {valeur}", titre_chantier: "CHANTIER : {valeur}"}
+    mobilier: {}
+  wc_autonome.xlsx:
+    feuille: "WC CHIMIQUE"
+    entete: {client: E5, titre_chantier: E7}
+    entete_format: {client: "CLIENT : {valeur}", titre_chantier: "CHANTIER : {valeur}"}
+    mobilier: {}
+  sanitaire_grand_mixte.xlsx:
+    feuille: "Grand Sanitaire Mixte"
+    entete: {client: E5, titre_chantier: E7}
+    entete_format: {client: "CLIENT : {valeur}", titre_chantier: "CHANTIER : {valeur}"}
+    mobilier: {}
+  sanitaire_petit_mixte.xlsx:
+    feuille: "Sanitaire Petit Mixte"
+    entete: {client: E5, titre_chantier: E7}
+    entete_format: {client: "CLIENT : {valeur}", titre_chantier: "CHANTIER : {valeur}"}
+    mobilier: {}
+  douches.xlsx:
+    feuille: "Grand Sanitaire Douche"
+    entete: {client: E5, titre_chantier: E7}
+    entete_format: {client: "CLIENT : {valeur}", titre_chantier: "CHANTIER : {valeur}"}
+    mobilier: {}
+  polysani_handi.xlsx:
+    feuille: "Polysani H"
+    entete: {client: E5, titre_chantier: E7}
+    entete_format: {client: "CLIENT : {valeur}", titre_chantier: "CHANTIER : {valeur}"}
+    mobilier: {}
+  polysani_homme_femme.xlsx:
+    feuille: "Polysani Homme-Femme"
+    entete: {client: D5, titre_chantier: D7}
+    entete_format: {client: "CLIENT : {valeur}", titre_chantier: "CHANTIER : {valeur}"}
+    mobilier: {}

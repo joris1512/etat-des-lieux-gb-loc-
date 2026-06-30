@@ -14,3 +14,18 @@ BUNGALOW 15m2 BATISO 2WC DONT 1 PMR,sanitaire_2wc_pmr.xlsx,sanitaire,false
 BUNGALOW 15 M2 2WC 2D 2U,sanitaire_2wc_2d_2u.xlsx,sanitaire,false
 CONTAINERS 6M,container_6m.xlsx,autre,false
 BUNGALOW 15M2,bungalow_15m2.xlsx,bungalow,true
+1 WC PMR,wc_1_pmr.xlsx,sanitaire,false
+2WCH,wc_2.xlsx,sanitaire,false
+3WC,wc_3.xlsx,sanitaire,false
+4 URINOIRS,urinoirs_4.xlsx,sanitaire,false
+7 URINOIRS,urinoirs_7.xlsx,sanitaire,false
+LAVE MAINS,lave_mains.xlsx,sanitaire,false
+ROULANTE VIP,roulante_vip_2wc.xlsx,sanitaire,false
+2WC 2UR,sanitaire_2wc_2ur.xlsx,sanitaire,false
+URINOIR FEMININ,urinoir_feminin.xlsx,sanitaire,false
+WC AUTONOME,wc_autonome.xlsx,sanitaire,false
+GRAND SANITAIRE MIXTE,sanitaire_grand_mixte.xlsx,sanitaire,false
+PETIT SANITAIRE MIXTE,sanitaire_petit_mixte.xlsx,sanitaire,false
+DOUCHE,douches.xlsx,sanitaire,false
+POLYSANI HANDI,polysani_handi.xlsx,sanitaire,false
+POLYSANI,polysani_homme_femme.xlsx,sanitaire,false
