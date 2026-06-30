@@ -11,7 +11,7 @@ from fastapi import Depends, FastAPI, File, Form, HTTPException, UploadFile
 from fastapi.responses import FileResponse, HTMLResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 
-from app import db
+from app import db, import_csv
 from app.assemblage import construire_plan
 from app.config import HTML_DIR, SORTIES_DIR, STATIC_DIR, get_reglages
 from app.generation import analyser, generer, generer_depuis_extraction
@@ -201,6 +201,26 @@ def historique_endpoint(q: str | None = None) -> dict:
 def clients_endpoint() -> dict:
     """Annuaire des clients connus de la base (agrégats)."""
     return {"clients": db.lister_clients()}
+
+
+@app.post("/clients/importer-csv")
+async def importer_csv_endpoint(fichier: UploadFile = File(...)) -> dict:
+    """Importe une base clients depuis un CSV (export CRM / tableur)."""
+    if not (fichier.filename or "").lower().endswith(".csv"):
+        raise HTTPException(status_code=400, detail="Le fichier doit être un .csv.")
+    contenu = await fichier.read()
+    if not contenu:
+        raise HTTPException(status_code=400, detail="Le fichier est vide.")
+    try:
+        lignes = import_csv.parser(contenu)
+    except Exception as exc:  # noqa: BLE001
+        raise HTTPException(status_code=422, detail=f"CSV illisible : {exc}") from exc
+    res = {"nouveaux": 0, "enrichis": 0, "ignores": 0}
+    cle = {"nouveau": "nouveaux", "enrichi": "enrichis", "ignore": "ignores"}
+    for ligne in lignes:
+        res[cle[db.importer_client(**ligne)]] += 1
+    logger.info("AUDIT import CSV : %s ligne(s) → %s", len(lignes), res)
+    return {"total": len(lignes), **res, "clients": db.lister_clients()}
 
 
 @app.get("/clients/{client_id}")

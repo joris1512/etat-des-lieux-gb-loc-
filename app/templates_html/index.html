@@ -310,6 +310,11 @@
       <!-- CLIENTS -->
       <section class="view" id="view-clients">
         <div class="page-head" style="margin-bottom:22px"><div class="eyebrow">// CONNAISSANCE</div><h1 class="title">Clients</h1><p class="subtitle">La base apprend chaque client à partir des devis : coordonnées, interlocuteurs, chantiers.</p></div>
+        <div class="card" style="margin-bottom:18px;display:flex;align-items:center;gap:16px;flex-wrap:wrap">
+          <div style="flex:1;min-width:220px"><div class="card-h" style="margin:0 0 4px">Importer une base clients</div><span class="hint">Fichier CSV (export CRM / tableur) — colonnes reconnues : Raison sociale, Client (n°), Interlocuteur, Cial…</span></div>
+          <input type="file" id="csv-input" accept=".csv,text/csv" style="display:none">
+          <button type="button" class="btn btn-ghost" id="btn-import-csv"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><path d="M7 10l5-5 5 5"/><path d="M12 5v12"/></svg>Importer un CSV</button>
+        </div>
         <div id="clients-liste"><div class="card"><div class="empty"><p>Chargement…</p></div></div></div>
         <div id="client-detail" style="display:none"></div>
         <div id="chantier-detail" style="display:none"></div>
@@ -415,6 +420,13 @@
       $('#cli-q').addEventListener('input',e=>rendreClients(e.target.value.trim().toLowerCase()));
       rendreClients('');
     }
+    async function importerCsv(file){
+      const fd=new FormData();fd.append('fichier',file);toast('Import du CSV en cours…','ok');
+      try{const r=await fetch('/clients/importer-csv',{method:'POST',body:fd});const d=await r.json();if(!r.ok)throw new Error(d.detail||'Import impossible');
+        toast(`${d.total} ligne(s) : ${d.nouveaux} client(s) ajouté(s), ${d.enrichis} mis à jour.`,'ok');chargerClients();}
+      catch(e){toast(e.message,'bad');}
+    }
+    (function(){const i=$('#csv-input'),b=$('#btn-import-csv');if(b&&i){b.addEventListener('click',()=>i.click());i.addEventListener('change',()=>{if(i.files.length){importerCsv(i.files[0]);i.value='';}});}})();
     function rendreClients(ql){
       const grid=$('#cli-grid');
       const d=clientsCache.filter(c=>!ql||(c.raison_sociale||'').toLowerCase().includes(ql)||(c.numero_client||'').toLowerCase().includes(ql));

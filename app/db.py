@@ -112,6 +112,71 @@ def _vide(v) -> bool:
     return v is None or str(v).strip() == ""
 
 
+def importer_client(
+    *,
+    raison_sociale: str = "",
+    numero_client: str | None = None,
+    commercial: str | None = None,  # non stocké au niveau client (info de devis)
+    interlocuteur: str | None = None,
+    adresse: str | None = None,
+    code_postal: str | None = None,
+    ville: str | None = None,
+) -> str:
+    """Crée ou enrichit un client (+ interlocuteur) depuis un import CSV.
+
+    Reconnaissance par n° client puis raison sociale (comme l'enrichissement par devis).
+    Renvoie « nouveau », « enrichi » ou « ignore ».
+    """
+    _ensure()
+    if _vide(raison_sociale) and _vide(numero_client):
+        return "ignore"
+    iso = datetime.now().isoformat(timespec="seconds")
+    with _conn() as cx:
+        client = None
+        if not _vide(numero_client):
+            client = cx.execute(
+                "SELECT id FROM clients WHERE numero_client = ?", (numero_client,)
+            ).fetchone()
+        if client is None and not _vide(raison_sociale):
+            client = cx.execute(
+                "SELECT id FROM clients WHERE raison_sociale = ? COLLATE NOCASE", (raison_sociale,)
+            ).fetchone()
+        if client is None:
+            cur = cx.execute(
+                """INSERT INTO clients
+                   (numero_client, raison_sociale, adresse, code_postal, ville, premiere_vue, derniere_vue)
+                   VALUES (?,?,?,?,?,?,?)""",
+                (numero_client or None, raison_sociale or "—", adresse, code_postal, ville, iso, iso),
+            )
+            client_id = int(cur.lastrowid)
+            statut = "nouveau"
+        else:
+            client_id = client["id"]
+            cx.execute(
+                """UPDATE clients SET
+                     numero_client = COALESCE(NULLIF(numero_client,''), ?),
+                     adresse       = COALESCE(NULLIF(adresse,''), ?),
+                     code_postal   = COALESCE(NULLIF(code_postal,''), ?),
+                     ville         = COALESCE(NULLIF(ville,''), ?),
+                     derniere_vue  = ?
+                   WHERE id = ?""",
+                (numero_client, adresse, code_postal, ville, iso, client_id),
+            )
+            statut = "enrichi"
+        if not _vide(interlocuteur):
+            ex = cx.execute(
+                "SELECT id FROM interlocuteurs WHERE client_id=? AND nom=? COLLATE NOCASE",
+                (client_id, interlocuteur),
+            ).fetchone()
+            if ex is None:
+                cx.execute(
+                    "INSERT INTO interlocuteurs (client_id, nom, premiere_vue, derniere_vue) "
+                    "VALUES (?,?,?,?)",
+                    (client_id, interlocuteur, iso, iso),
+                )
+    return statut
+
+
 # --------------------------------------------------------------------------- #
 # Enrichissement : le cœur de la base qui apprend
 # --------------------------------------------------------------------------- #
