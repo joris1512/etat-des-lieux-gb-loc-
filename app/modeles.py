@@ -65,6 +65,11 @@ def _valider_nom(nom: str) -> str:
     # Path(nom).name retire tout dossier ; on traite aussi les séparateurs Windows.
     base = Path(nom.replace("\\", "/")).name
     if not base.lower().endswith(".xlsx"):
+        if base.lower().endswith((".xls", ".xltx", ".xlsm", ".xlt", ".xlsb")):
+            raise ValueError(
+                "Format Excel ancien non accepté ici. Ouvrez le fichier dans Excel, "
+                "« Enregistrer sous » → « Classeur Excel (*.xlsx) », puis téléversez le .xlsx."
+            )
         raise ValueError("Le fichier doit être un .xlsx.")
     if base.startswith("~$") or base in {"", ".", ".."}:
         raise ValueError("Nom de fichier invalide.")
