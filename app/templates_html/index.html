@@ -9,7 +9,7 @@
     :root {
       --bg:#070b09; --bg2:#0a100d; --surface:#0e1714; --surface2:#111d18;
       --bd:rgba(120,170,145,.12); --bd2:rgba(120,170,145,.22);
-      --ink:#eaf3ee; --muted:#8fa69b; --faint:#5d7268;
+      --ink:#eaf3ee; --muted:#c7d6cd; --faint:#a3b6ab;
       --green:#20cf73; --green-2:#16a85b; --green-glow:rgba(32,207,115,.30); --green-soft:rgba(32,207,115,.12);
       --red:#ff5347; --red-soft:rgba(255,83,71,.14); --amber:#ffb02e; --amber-soft:rgba(255,176,46,.14);
       --blue:#4aa8ff; --blue-soft:rgba(74,168,255,.12);
@@ -529,7 +529,7 @@
       try{const r=await fetch('/generer-revise',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(ext)});const data=await r.json();if(!r.ok)throw new Error(data.detail||'Erreur');renderResult(data);chargerDashboard();}
       catch(e){genResult.innerHTML=`<div class="card"><div class="alert err">${I.alert}<div><div class="at">La génération a échoué</div>${esc(e.message)}</div></div></div>`;}finally{stopLoading();}}
     const TYPE={assemble:{ic:'assemble',icon:I.layers,label:'Assemblé',grp:'États assemblés'},individuel:{ic:'individuel',icon:I.box,label:'Individuel',grp:'États individuels'},sanitaire:{ic:'sanitaire',icon:I.droplet,label:'Sanitaire',grp:'Sanitaires'}};
-    const typeOf=n=>/_assemble\b/.test(n)?'assemble':/_sanitaire\b/.test(n)?'sanitaire':'individuel';
+    const typeOf=n=>{const m=/ - ([^-]+)\.xlsx$/i.exec(n);const t=(m?m[1]:'').trim().toLowerCase();return t.startsWith('assembl')?'assemble':t.startsWith('sanitaire')?'sanitaire':'individuel';};
     function renderResult(data){const g={assemble:[],individuel:[],sanitaire:[]};data.fichiers.forEach(f=>g[typeOf(f.nom)].push(f));
       let h='<div class="card"><div class="summary"><div class="big mono">'+data.fichiers.length+'</div><div class="lab">état(s) des lieux généré(s)</div>';
       if(data.numero_offre)h+=`<span class="chip" style="margin-left:4px">${I.file} OFFRE <b>${esc(data.numero_offre)}</b></span>`;

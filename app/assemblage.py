@@ -34,12 +34,13 @@ def _modele_assemble() -> str:
     return cfg.get("modele_assemble", "bungalow_assemble.xlsx")
 
 
-def _slug(texte: str | None) -> str:
-    """Slug ASCII pour nom de fichier (lettres/chiffres, séparés par '_')."""
+def _lisible(texte: str | None) -> str:
+    """Texte lisible et sûr pour un nom de fichier Windows (sans caractères interdits)."""
     if not texte:
-        return "BLOC"
-    s = re.sub(r"[^A-Za-z0-9]+", "_", texte).strip("_").upper()
-    return s or "BLOC"
+        return ""
+    t = re.sub(r'[\\/:*?"<>|]+', " ", texte)  # caractères interdits sous Windows
+    t = t.replace(" - ", " ")  # réserve « - » au séparateur du nom de fichier
+    return re.sub(r"\s+", " ", t).strip()
 
 
 def _fusionner_mobilier(articles: list[ArticleDevis]) -> list[MobilierItem]:
@@ -57,11 +58,14 @@ def construire_plan(extraction: ExtractionDevis) -> PlanGeneration:
     plan = PlanGeneration(entete=extraction.entete)
     seq = 0  # compteur global -> préfixe de fichier unique et ordonné
 
-    def nom_fichier(slug: str, suffixe: str) -> str:
+    def nom_fichier(bloc: str | None, type_label: str) -> str:
+        """Nom de fichier lisible : « NN - CLIENT - ce que c'est - type.xlsx »."""
         nonlocal seq
         seq += 1
-        offre = _slug(extraction.entete.numero_offre) if extraction.entete.numero_offre else "DEVIS"
-        return f"{seq:02d}_{offre}_{slug}_{suffixe}.xlsx"
+        client = _lisible(extraction.entete.client) or "Client"
+        quoi = _lisible(bloc)
+        morceaux = [f"{seq:02d}", client] + ([quoi] if quoi else []) + [type_label]
+        return " - ".join(morceaux) + ".xlsx"
 
     # Résolution modèle + nature pour chaque article (en filtrant prestations / non reconnus).
     resolus: list[tuple[ArticleDevis, str, bool]] = []  # (article, modele, est_bungalow)
@@ -96,7 +100,6 @@ def construire_plan(extraction: ExtractionDevis) -> PlanGeneration:
         fonction = detecter_fonction(bloc)
         mobilier = _fusionner_mobilier(articles)
         n = len(articles)
-        slug = _slug(bloc)
         if n >= 2:
             # 1 état assemblé (porte le mobilier) ...
             plan.etats.append(
@@ -108,7 +111,7 @@ def construire_plan(extraction: ExtractionDevis) -> PlanGeneration:
                     texte_ligne=articles[0].texte_ligne,
                     nb_modules=n,
                     mobilier=mobilier,
-                    nom_fichier=nom_fichier(slug, "assemble"),
+                    nom_fichier=nom_fichier(bloc, "assemblé"),
                 )
             )
             # ... + N individuels (en-tête seule), chacun avec SON modèle résolu.
@@ -124,7 +127,7 @@ def construire_plan(extraction: ExtractionDevis) -> PlanGeneration:
                         nb_modules=1,
                         index_module=i,
                         mobilier=[],
-                        nom_fichier=nom_fichier(slug, f"individuel_{i}"),
+                        nom_fichier=nom_fichier(bloc, f"individuel {i}"),
                     )
                 )
         else:
@@ -138,7 +141,7 @@ def construire_plan(extraction: ExtractionDevis) -> PlanGeneration:
                     texte_ligne=articles[0].texte_ligne,
                     nb_modules=1,
                     mobilier=mobilier,
-                    nom_fichier=nom_fichier(slug, "individuel"),
+                    nom_fichier=nom_fichier(bloc, "individuel"),
                 )
             )
         run = []
@@ -164,7 +167,7 @@ def construire_plan(extraction: ExtractionDevis) -> PlanGeneration:
                     texte_ligne=art.texte_ligne,
                     nb_modules=1,
                     mobilier=_fusionner_mobilier([art]),
-                    nom_fichier=nom_fichier(_slug(art.bloc), "sanitaire"),
+                    nom_fichier=nom_fichier(art.bloc, "sanitaire"),
                 )
             )
 
