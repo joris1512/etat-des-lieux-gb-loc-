@@ -9,6 +9,7 @@
 # ⚠️ STARTER déduit du devis EIFFAGE. À COMPLÉTER lundi avec les ~25 entrées officielles
 #    (et les vrais noms de fichiers des modèles). N'inventez aucune correspondance ici.
 pattern,modele,categorie,est_bungalow
+PETIT SANITAIRE W1WC SOLO,sanitaire_1wc.xlsx,sanitaire,false
 BUNGALOW 15m2 BATISO 2WC DONT 1 PMR,sanitaire_2wc_pmr.xlsx,sanitaire,false
 BUNGALOW 15 M2 2WC 2D 2U,sanitaire_2wc_2d_2u.xlsx,sanitaire,false
 BUNGALOW 15m2 BATISO,bungalow_15m2.xlsx,bungalow,true

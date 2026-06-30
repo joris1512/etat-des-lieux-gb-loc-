@@ -63,9 +63,11 @@ class EnteteDevis(BaseModel):
     date_devis: str | None = Field(default=None, description="Date du devis (texte tel quel).")
 
     # --- Chantier / lieu d'utilisation (en-tête de l'état des lieux) ---
-    titre_chantier: str = Field(description="Intitulé du chantier / lieu d'utilisation.")
-    adresse: str = Field(description="Adresse du lieu d'utilisation (voie).")
-    code_postal: str = Field(description="Code postal du lieu d'utilisation.")
+    # Optionnels : un devis peut ne pas tous les comporter. La génération ne doit JAMAIS
+    # échouer pour un champ d'en-tête absent (il restera vide, rempli à la main au besoin).
+    titre_chantier: str = Field(default="", description="Intitulé du chantier / lieu d'utilisation.")
+    adresse: str = Field(default="", description="Adresse du lieu d'utilisation (voie).")
+    code_postal: str = Field(default="", description="Code postal du lieu d'utilisation.")
     ville: str | None = Field(default=None, description="Ville du lieu d'utilisation.")
 
 

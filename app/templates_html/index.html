@@ -520,7 +520,7 @@
     function annulerReview(){genReview.style.display='none';genReview.innerHTML='';genUpload.style.display='block';}
     function collecterReview(){
       const ext=JSON.parse(JSON.stringify(revExtraction));
-      genReview.querySelectorAll('[data-ent]').forEach(inp=>ext.entete[inp.dataset.ent]=inp.value.trim()||null);
+      genReview.querySelectorAll('[data-ent]').forEach(inp=>ext.entete[inp.dataset.ent]=inp.value.trim());
       const arts=[];
       ext.articles.forEach((a,i)=>{const inc=genReview.querySelector(`[data-inc="${i}"]`);if(inc&&!inc.checked)return;const bl=genReview.querySelector(`[data-bloc="${i}"]`);if(bl)a.bloc=bl.value.trim()||null;(a.mobilier||[]).forEach((m,j)=>{const mi=genReview.querySelector(`[data-mob="${i}-${j}"]`);if(mi)m.quantite=parseInt(mi.value,10)||0;});arts.push(a);});
       ext.articles=arts;return ext;

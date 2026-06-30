@@ -64,7 +64,13 @@ modeles:
     entete: {client: E5, titre_chantier: E7}
     entete_format: {client: "Client : {valeur}", titre_chantier: "Chantier : {valeur}"}
     mobilier: {}
-  # --- Sanitaires : ENCORE sur modèles factices (cellules réelles à brancher après vérif) ---
+  # --- Sanitaire 1WC : VRAI modèle (BLOC 1 WC). En-tête « CLIENT : » / « CHANTIER : » en E5/E7. ---
+  sanitaire_1wc.xlsx:
+    feuille: WC
+    entete: {client: E5, titre_chantier: E7}
+    entete_format: {client: "CLIENT : {valeur}", titre_chantier: "CHANTIER : {valeur}"}
+    mobilier: {}
+  # --- Sanitaires EIFFAGE : ENCORE sur modèles factices (modèle réel à choisir + brancher) ---
   sanitaire_2wc_2d_2u.xlsx:
     # Un sanitaire n'a pas de mobilier de bureau : on ne reporte que l'en-tête.
     mobilier: {}

@@ -1,9 +1,10 @@
-"""Remplissage des modèles Excel via openpyxl — en-tête + quantités de mobilier.
+"""Remplissage des modèles Excel — en-tête + fonction + mobilier.
 
-On ouvre le modèle, on écrit UNIQUEMENT les cellules d'en-tête et de mobilier prévues par
-config/cellules.yaml, puis on enregistre une copie. La mise en forme du modèle est préservée
-(openpyxl conserve styles, fusions, largeurs). On ne touche JAMAIS aux champs d'état réel,
-réserves, signatures, ni aux cases de fonction (vestiaire/réfectoire/…).
+On écrit UNIQUEMENT les cellules prévues par config/cellules.yaml via `app.patch_xlsx`, qui
+modifie le XML de la feuille ciblée **en préservant tout le reste du classeur** : logo GB,
+dessins en perspective, mise en forme, autres onglets. (openpyxl, lui, perd images et dessins
+à l'enregistrement — d'où ce moteur dédié.) On ne touche jamais aux champs d'état réel,
+réserves ou signatures.
 """
 
 from __future__ import annotations
@@ -12,8 +13,8 @@ from functools import lru_cache
 from pathlib import Path
 
 import yaml
-from openpyxl import load_workbook
 
+from app import patch_xlsx
 from app.config import CONFIG_CELLULES
 from app.correspondance import normaliser
 from app.models import EnteteDevis, EtatDesLieux
@@ -67,14 +68,7 @@ def remplir_etat(
 ) -> list[str]:
     """Remplit un modèle et l'enregistre. Renvoie la liste des désignations non mappées."""
     cfg = _cfg_modele(etat.modele)
-    wb = load_workbook(modele_path)
-    feuille = cfg.get("feuille")
-    if feuille:
-        if feuille not in wb.sheetnames:
-            raise ValueError(f"Feuille « {feuille} » absente du modèle {etat.modele}.")
-        ws = wb[feuille]
-    else:
-        ws = wb.active
+    a_ecrire: dict[str, object] = {}
 
     # --- En-tête ---
     valeurs_entete = {
@@ -92,15 +86,14 @@ def remplir_etat(
             # Sur les vrais modèles, le libellé fait partie de la cellule (ex. « Client : … ») :
             # un gabarit « Client : {valeur} » reconstitue le libellé + la valeur.
             gabarit = formats.get(champ)
-            ws[cellule] = gabarit.format(valeur=valeur) if gabarit else valeur
+            a_ecrire[cellule] = gabarit.format(valeur=valeur) if gabarit else valeur
 
     # --- Fonction du bungalow ---
     # On REMPLACE la ligne « BUREAU / SALLE DE REUNION / VESTIAIRE / REFECTOIRE » par la
-    # fonction retenue (ex. « VESTIAIRE »). Rien n'est écrit si la fonction est indéterminée
-    # (le modèle garde alors sa ligne d'origine, à renseigner à la main).
+    # fonction retenue (ex. « VESTIAIRE »). Rien n'est écrit si la fonction est indéterminée.
     cellule_fonction = cfg.get("fonction")
     if cellule_fonction and etat.fonction:
-        ws[cellule_fonction] = etat.fonction
+        a_ecrire[cellule_fonction] = etat.fonction
 
     # --- Mobilier (somme par cellule) ---
     table_mobilier = cfg.get("mobilier") or {}
@@ -112,9 +105,7 @@ def remplir_etat(
             sommes[cellule] = sommes.get(cellule, 0) + item.quantite
         else:
             non_mappes.append(item.designation)
-    for cellule, qte in sommes.items():
-        ws[cellule] = qte
+    a_ecrire.update(sommes)
 
-    sortie_path.parent.mkdir(parents=True, exist_ok=True)
-    wb.save(sortie_path)
+    patch_xlsx.ecrire_cellules(modele_path, sortie_path, cfg.get("feuille"), a_ecrire)
     return non_mappes
