@@ -34,6 +34,13 @@ def _modele_assemble() -> str:
     return cfg.get("modele_assemble", "bungalow_assemble.xlsx")
 
 
+def _bungalow_individuel(avec_mobilier: bool) -> str | None:
+    """Modèle de bungalow individuel selon la présence de mobilier (config cellules.yaml)."""
+    cfg = yaml.safe_load(CONFIG_CELLULES.read_text(encoding="utf-8")) or {}
+    b = cfg.get("bungalow_individuel") or {}
+    return b.get("mobilier" if avec_mobilier else "vide")
+
+
 def _lisible(texte: str | None) -> str:
     """Texte lisible et sûr pour un nom de fichier Windows (sans caractères interdits)."""
     if not texte:
@@ -85,7 +92,11 @@ def construire_plan(extraction: ExtractionDevis) -> PlanGeneration:
                 f"Type incertain pour « {art.texte_ligne} » : devis lu comme {lu}, "
                 f"table = {attendu} (la table fait foi)."
             )
-        resolus.append((art, entree.modele, entree.est_bungalow))
+        # Pour un bungalow : on choisit la variante vide / avec mobilier selon le mobilier listé.
+        modele = entree.modele
+        if entree.est_bungalow:
+            modele = _bungalow_individuel(bool(art.mobilier)) or entree.modele
+        resolus.append((art, modele, entree.est_bungalow))
 
     # Regroupement en "runs" de bungalows consécutifs du même bloc.
     run: list[tuple[ArticleDevis, str]] = []  # (article, modele) du bungalow standard

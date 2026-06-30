@@ -13,6 +13,11 @@
 # Modèle pour l'état "assemblé" (regroupe N bungalows). Référencé automatiquement.
 modele_assemble: bungalow_assemble.xlsx
 
+# Modèle du bungalow INDIVIDUEL choisi selon la présence de mobilier sur la ligne du devis.
+bungalow_individuel:
+  vide: bungalow_vide.xlsx
+  mobilier: bungalow_mobilier.xlsx
+
 # Fonctions de bungalow reconnues -> texte canonique reporté sur la ligne « fonction ».
 # Pour chaque fonction, les mots-clés cherchés dans le « bloc » du devis (après normalisation :
 # majuscules / sans accents). Le 1er motif trouvé gagne : l'ordre fixe donc la priorité.
@@ -63,6 +68,20 @@ modeles:
     fonction: B12
     entete: {client: E5, titre_chantier: E7}
     entete_format: {client: "Client : {valeur}", titre_chantier: "Chantier : {valeur}"}
+    mobilier: {}
+  # --- Bungalows individuels RÉELS : vide / avec mobilier. En-tête E5/E6 (CLIENT : / CHANTIER :).
+  #     Fonction = 4 cases séparées (réunion B8 / vestiaire D8 / bureau E8 / réfectoire G8). ---
+  bungalow_vide.xlsx:
+    feuille: "Bungalow vide"
+    entete: {client: E5, titre_chantier: E6}
+    entete_format: {client: "CLIENT : {valeur}", titre_chantier: "CHANTIER : {valeur}"}
+    fonctions_cellules: {SALLE DE REUNION: B8, VESTIAIRE: D8, BUREAU: E8, REFECTOIRE: G8}
+    mobilier: {}
+  bungalow_mobilier.xlsx:
+    feuille: "Bungalow avec mobiliers"
+    entete: {client: E5, titre_chantier: E6}
+    entete_format: {client: "CLIENT : {valeur}", titre_chantier: "CHANTIER : {valeur}"}
+    fonctions_cellules: {SALLE DE REUNION: B8, VESTIAIRE: D8, BUREAU: E8, REFECTOIRE: G8}
     mobilier: {}
   # --- Sanitaire 1WC : VRAI modèle (BLOC 1 WC). En-tête « CLIENT : » / « CHANTIER : » en E5/E7. ---
   sanitaire_1wc.xlsx:

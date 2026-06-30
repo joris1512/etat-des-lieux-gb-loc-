@@ -44,6 +44,9 @@ def _cfg_modele(modele: str) -> dict:
         if "entete_format" in surcharge
         else (defaut.get("entete_format") or {})
     )
+    resolu["fonctions_cellules"] = (
+        surcharge.get("fonctions_cellules") or defaut.get("fonctions_cellules") or {}
+    )
     resolu["mobilier"] = (
         surcharge["mobilier"] if "mobilier" in surcharge else (defaut.get("mobilier") or {})
     )
@@ -94,6 +97,11 @@ def remplir_etat(
     cellule_fonction = cfg.get("fonction")
     if cellule_fonction and etat.fonction:
         a_ecrire[cellule_fonction] = etat.fonction
+
+    # Modèles à 4 cases séparées (réunion / vestiaire / bureau / réfectoire) : on marque la bonne.
+    cells_fonction = cfg.get("fonctions_cellules") or {}
+    if cells_fonction and etat.fonction and etat.fonction in cells_fonction:
+        a_ecrire[cells_fonction[etat.fonction]] = f"» {etat.fonction} «"
 
     # --- Mobilier (somme par cellule) ---
     table_mobilier = cfg.get("mobilier") or {}

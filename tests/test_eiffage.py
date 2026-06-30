@@ -55,10 +55,10 @@ def test_generation_complete_produit_17_fichiers_et_zip():
     assert (job_dir / rapport.zip_nom).exists()
 
     par_nom = {e.nom_fichier: e for e in construire_plan(charger_fixture()).etats}
-    # En-tête écrite sur un bungalow réel : cellule client E5, préfixée « Client : ».
+    # En-tête écrite sur un bungalow réel : le nom du client figure dans la cellule client.
     nom_bung = next(n for n in rapport.fichiers if par_nom[n].type_etat == "individuel")
     ws, cfg = _ouvrir_etat(job_dir, nom_bung, par_nom[nom_bung])
-    assert ws[cfg["entete"]["client"]].value == "Client : EIFFAGE TRX MARITIMES FLUVIAUX"
+    assert "EIFFAGE TRX MARITIMES FLUVIAUX" in str(ws[cfg["entete"]["client"]].value)
 
 
 def test_corps_inspection_non_rempli():
@@ -66,8 +66,9 @@ def test_corps_inspection_non_rempli():
     par_nom = {e.nom_fichier: e for e in construire_plan(charger_fixture()).etats}
     nom_bung = next(n for n in rapport.fichiers if par_nom[n].type_etat == "individuel")
     ws, _ = _ouvrir_etat(job_dir, nom_bung, par_nom[nom_bung])
-    # La grille d'inspection (corps) n'est jamais pré-remplie : libellé d'origine intact.
-    assert ws["A40"].value == "Radiateur"
+    # La grille d'inspection (corps) n'est jamais pré-remplie : ses libellés restent présents.
+    textes = {str(c.value) for row in ws.iter_rows() for c in row if c.value}
+    assert any("ETAT EXTERIEUR" in t for t in textes)
 
 
 def test_fonction_bungalow_ecrite_dans_les_fichiers_produits():
@@ -81,7 +82,11 @@ def test_fonction_bungalow_ecrite_dans_les_fichiers_produits():
         if not etat.fonction:
             continue
         ws, cfg = _ouvrir_etat(job_dir, nom, etat)
-        # La fonction retenue REMPLACE la ligne d'origine (mot seul, ex. « VESTIAIRE »).
-        assert ws[cfg["fonction"]].value == etat.fonction
-        verifies += 1
-    assert verifies >= 4  # au moins les 4 blocs assemblés (réfectoire, 2x bureaux, réunion)
+        cells_fn = cfg.get("fonctions_cellules") or {}
+        if cfg.get("fonction"):  # modèle à ligne unique (assemblé) : remplacée par la fonction
+            assert ws[cfg["fonction"]].value == etat.fonction
+            verifies += 1
+        elif etat.fonction in cells_fn:  # modèle à 4 cases : la bonne est marquée
+            assert etat.fonction in str(ws[cells_fn[etat.fonction]].value)
+            verifies += 1
+    assert verifies >= 4
