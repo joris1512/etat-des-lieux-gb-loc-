@@ -167,7 +167,7 @@ def construire_plan(extraction: ExtractionDevis) -> PlanGeneration:
                     texte_ligne=art.texte_ligne,
                     nb_modules=1,
                     mobilier=_fusionner_mobilier([art]),
-                    nom_fichier=nom_fichier(art.bloc, "sanitaire"),
+                    nom_fichier=nom_fichier(art.bloc or art.texte_ligne, "sanitaire"),
                 )
             )
 

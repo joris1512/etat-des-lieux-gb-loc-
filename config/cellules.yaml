@@ -76,3 +76,9 @@ modeles:
     mobilier: {}
   sanitaire_2wc_pmr.xlsx:
     mobilier: {}
+  # --- Conteneur 6 m maritime : VRAI modèle (onglet avec perspectives), en-tête E5/E7 ---
+  container_6m.xlsx:
+    feuille: CONTAINER 6m (perspectives)
+    entete: {client: E5, titre_chantier: E7}
+    entete_format: {client: "CLIENT : {valeur}", titre_chantier: "CHANTIER : {valeur}"}
+    mobilier: {}
