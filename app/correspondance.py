@@ -109,3 +109,57 @@ def est_prestation(texte_ligne: str) -> bool:
     """True si la ligne est une prestation à ignorer (transport, assemblage, etc.)."""
     cible = normaliser(texte_ligne)
     return any(normaliser(mot) in cible for mot in MOTS_PRESTATION)
+
+
+# --------------------------------------------------------------------------- #
+# Gestion des règles depuis l'application (éditeur de correspondances)
+# --------------------------------------------------------------------------- #
+def lister_regles() -> list[dict]:
+    """Règles actuelles (motif normalisé -> modèle), pour l'éditeur de l'UI."""
+    return [
+        {
+            "pattern": e.pattern_norm,
+            "modele": e.modele,
+            "categorie": e.categorie,
+            "est_bungalow": e.est_bungalow,
+        }
+        for e in charger_correspondances()
+    ]
+
+
+def _ecrire_regles(regles: list[dict]) -> None:
+    """Réécrit correspondances.csv (en gardant l'en-tête de commentaires) + vide le cache."""
+    commentaires = [
+        ln
+        for ln in CORRESPONDANCES_CSV.read_text(encoding="utf-8").splitlines()
+        if ln.lstrip().startswith("#")
+    ]
+    tampon = io.StringIO()
+    writer = csv.writer(tampon, lineterminator="\n")
+    writer.writerow(["pattern", "modele", "categorie", "est_bungalow"])
+    for r in regles:
+        writer.writerow(
+            [r["pattern"], r["modele"], r.get("categorie") or "", "true" if r["est_bungalow"] else "false"]
+        )
+    CORRESPONDANCES_CSV.write_text("\n".join(commentaires) + "\n" + tampon.getvalue(), encoding="utf-8")
+    charger_correspondances.cache_clear()
+
+
+def ajouter_ou_modifier_regle(
+    pattern: str, modele: str, categorie: str = "", est_bungalow: bool = False
+) -> None:
+    """Ajoute une règle ou remplace celle du même motif (motif stocké normalisé)."""
+    motif = normaliser(pattern)
+    if not motif or not modele.strip():
+        raise ValueError("Motif et modèle sont requis.")
+    regles = [r for r in lister_regles() if r["pattern"] != motif]
+    regles.append(
+        {"pattern": motif, "modele": modele.strip(), "categorie": categorie, "est_bungalow": bool(est_bungalow)}
+    )
+    _ecrire_regles(regles)
+
+
+def supprimer_regle(pattern: str) -> None:
+    """Supprime la règle du motif donné."""
+    motif = normaliser(pattern)
+    _ecrire_regles([r for r in lister_regles() if r["pattern"] != motif])

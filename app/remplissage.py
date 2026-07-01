@@ -104,16 +104,19 @@ def remplir_etat(
         a_ecrire[cells_fonction[etat.fonction]] = f"» {etat.fonction} «"
 
     # --- Mobilier (somme par cellule) ---
+    # Seulement si le modèle a des CASES quantité mobilier. Les vrais modèles n'en ont pas :
+    # le mobilier y est matérialisé par le CHOIX du modèle « avec mobilier » (pas d'avertissement).
     table_mobilier = cfg.get("mobilier") or {}
-    sommes: dict[str, int] = {}
     non_mappes: list[str] = []
-    for item in etat.mobilier:
-        cellule = _cellule_mobilier(item.designation, table_mobilier)
-        if cellule:
-            sommes[cellule] = sommes.get(cellule, 0) + item.quantite
-        else:
-            non_mappes.append(item.designation)
-    a_ecrire.update(sommes)
+    if table_mobilier:
+        sommes: dict[str, int] = {}
+        for item in etat.mobilier:
+            cellule = _cellule_mobilier(item.designation, table_mobilier)
+            if cellule:
+                sommes[cellule] = sommes.get(cellule, 0) + item.quantite
+            else:
+                non_mappes.append(item.designation)
+        a_ecrire.update(sommes)
 
     patch_xlsx.ecrire_cellules(modele_path, sortie_path, cfg.get("feuille"), a_ecrire)
     return non_mappes
