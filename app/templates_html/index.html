@@ -296,6 +296,17 @@
           </form>
         </div>
         <div class="card"><div class="card-h">État de la bibliothèque</div><div id="mod-liste"><div class="empty"><p>Chargement…</p></div></div></div>
+        <div class="card">
+          <div class="card-h">Règles de reconnaissance — texte du devis → modèle</div>
+          <p class="hint" style="margin:-8px 0 14px">Quand une ligne de devis contient TOUS ces mots-clés, l'outil choisit ce modèle. Le plus de mots-clés = prioritaire. (Vous pouvez toujours corriger au cas par cas à la génération.)</p>
+          <div id="regles-liste"><div class="empty"><p>Chargement…</p></div></div>
+          <div class="fgrid" style="margin-top:16px;align-items:end">
+            <div class="field"><label>Mots-clés cherchés dans le devis</label><input id="regle-pattern" placeholder="ex. BUNGALOW REFECTOIRE"></div>
+            <div class="field"><label>Modèle (état des lieux)</label><select id="regle-modele" style="height:38px;background:var(--surface);color:var(--ink);border:1px solid var(--bd2);border-radius:var(--rc);padding:0 10px;font-family:var(--sans)"></select></div>
+            <div class="field" style="max-width:150px"><label>Type</label><label style="display:flex;align-items:center;gap:8px;height:38px;font-size:13px"><input type="checkbox" id="regle-bung"> bungalow assemblable</label></div>
+            <button type="button" class="btn btn-primary" id="btn-regle-add">Ajouter / Modifier</button>
+          </div>
+        </div>
       </section>
 
       <!-- HISTORIQUE -->
@@ -561,10 +572,21 @@
     bindDrag($('#zone-mod'),modInput);
     modInput.addEventListener('change',()=>modChip.innerHTML=modInput.files.length?[...modInput.files].map(f=>`<span class="file-chip">${I.file}${esc(f.name)}<span class="sz">· ${ko(f.size)}</span></span>`).join(' '):'');
     function modeleRow(m,sup){const st=m.present?'<span class="state present">présent</span>':'<span class="state missing">manquant</span>';const meta=m.present?`<div class="mmeta">${ko(m.taille)} · ${esc(m.modifie)}</div>`:'<div class="mmeta">non déposé</div>';const del=(m.present&&sup)?`<button class="btn btn-danger btn-sm" data-del="${esc(m.nom)}">${I.trash}</button>`:'';return `<div class="mrow"><div class="fic ${m.present?'':'miss'}">${I.box2}</div><div><div class="mname">${esc(m.nom)}</div>${meta}</div><div class="right">${st}${del}</div></div>`;}
-    async function chargerModeles(){try{const data=await(await fetch('/modeles')).json();const nav=$('#nav-manquants');if(data.manquants>0){nav.style.display='grid';nav.textContent=data.manquants;}else nav.style.display='none';let h=data.manquants?`<div class="statusbar warn">${I.alert} ${data.manquants} modèle(s) manquant(s).</div>`:`<div class="statusbar ok">${I.check} Tous les modèles attendus sont présents.</div>`;data.attendus.forEach(m=>h+=modeleRow(m,false));if(data.supplementaires.length){h+=`<details class="extra"><summary>Fichiers supplémentaires (${data.supplementaires.length})</summary>`;data.supplementaires.forEach(m=>h+=modeleRow(m,true));h+='</details>';}modListe.innerHTML=h;modListe.querySelectorAll('[data-del]').forEach(b=>b.addEventListener('click',()=>supprimerModele(b.dataset.del)));}catch(e){erreurChargement(modListe,chargerModeles);}}
+    async function chargerModeles(){try{const data=await(await fetch('/modeles')).json();const nav=$('#nav-manquants');if(data.manquants>0){nav.style.display='grid';nav.textContent=data.manquants;}else nav.style.display='none';let h=data.manquants?`<div class="statusbar warn">${I.alert} ${data.manquants} modèle(s) manquant(s).</div>`:`<div class="statusbar ok">${I.check} Tous les modèles attendus sont présents.</div>`;data.attendus.forEach(m=>h+=modeleRow(m,false));if(data.supplementaires.length){h+=`<details class="extra"><summary>Fichiers supplémentaires (${data.supplementaires.length})</summary>`;data.supplementaires.forEach(m=>h+=modeleRow(m,true));h+='</details>';}modListe.innerHTML=h;modListe.querySelectorAll('[data-del]').forEach(b=>b.addEventListener('click',()=>supprimerModele(b.dataset.del)));chargerRegles();}catch(e){erreurChargement(modListe,chargerModeles);}}
     async function televerser(){if(!modInput.files.length){toast('Sélectionnez au moins un fichier .xlsx.','bad');return;}const fd=new FormData();for(const f of modInput.files)fd.append('fichiers',f);btnUpload.disabled=true;modStatut.textContent='Téléversement…';try{const data=await(await fetch('/modeles',{method:'POST',body:fd})).json();const ok=data.resultats.filter(x=>x.ok),bad=data.resultats.filter(x=>!x.ok);if(ok.length)toast(`${ok.length} modèle(s) enregistré(s).`,'ok');bad.forEach(x=>toast(`${x.nom} : ${x.erreur}`,'bad'));modStatut.textContent='';modInput.value='';modChip.innerHTML='';chargerModeles();}catch(e){toast(e.message,'bad');modStatut.textContent='';}finally{btnUpload.disabled=false;}}
     async function supprimerModele(nom){if(!confirm(`Supprimer le modèle « ${nom} » ?`))return;try{const r=await fetch('/modeles/'+encodeURIComponent(nom),{method:'DELETE'});if(!r.ok){const d=await r.json();throw new Error(d.detail||'Erreur');}toast('Modèle supprimé.','ok');chargerModeles();}catch(e){toast(e.message,'bad');}}
     btnUpload.addEventListener('click',televerser);btnRefresh.addEventListener('click',()=>{chargerModeles();toast('Liste actualisée.','ok');});
+
+    /* RÈGLES DE RECONNAISSANCE (éditeur) */
+    async function chargerRegles(){const box=$('#regles-liste'),sel=$('#regle-modele');if(!box)return;let d;try{d=await(await fetch('/correspondances')).json();}catch(_){box.innerHTML='<div class="empty"><p>Chargement impossible.</p></div>';return;}
+      if(sel)sel.innerHTML=d.modeles.map(m=>`<option value="${esc(m)}">${esc(m.replace(/\.xlsx$/,''))}</option>`).join('');
+      if(!d.regles.length){box.innerHTML='<div class="empty"><p>Aucune règle pour le moment.</p></div>';return;}
+      box.innerHTML=d.regles.map(r=>`<div style="display:flex;align-items:center;gap:12px;padding:9px 0;border-bottom:1px solid var(--bd)"><div class="mono" style="flex:1;color:var(--ink)">${esc(r.pattern)}</div><span style="color:var(--faint)">→</span><div style="flex:1;color:var(--muted)">${esc(r.modele.replace(/\.xlsx$/,''))}${r.est_bungalow?' <span class="mtag b">bungalow</span>':''}</div><button class="btn btn-danger btn-sm" data-delr="${esc(r.pattern)}">${I.trash}</button></div>`).join('');
+      box.querySelectorAll('[data-delr]').forEach(b=>b.addEventListener('click',()=>supprimerRegle(b.dataset.delr)));}
+    async function enregistrerRegle(){const pattern=$('#regle-pattern').value.trim(),modele=$('#regle-modele').value,bung=$('#regle-bung').checked;if(!pattern||!modele){toast('Mots-clés et modèle requis.','bad');return;}
+      try{const r=await fetch('/correspondances',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({pattern,modele,est_bungalow:bung,categorie:bung?'bungalow':'sanitaire'})});const d=await r.json();if(!r.ok)throw new Error(d.detail||'Erreur');toast('Règle enregistrée.','ok');$('#regle-pattern').value='';$('#regle-bung').checked=false;chargerRegles();}catch(e){toast(e.message,'bad');}}
+    async function supprimerRegle(pattern){if(!confirm(`Supprimer la règle « ${pattern} » ?`))return;try{const r=await fetch('/correspondances?pattern='+encodeURIComponent(pattern),{method:'DELETE'});if(!r.ok){const d=await r.json();throw new Error(d.detail||'Erreur');}toast('Règle supprimée.','ok');chargerRegles();}catch(e){toast(e.message,'bad');}}
+    $('#btn-regle-add').addEventListener('click',enregistrerRegle);
 
     /* Init */
     (async()=>{try{const s=await(await fetch('/etat')).json();$('#auth-row').innerHTML=s.auth?`<span class="dot"></span><span>Connecté · ${esc(s.utilisateur)}</span>`:`<span class="dot"></span><span>En ligne · accès ouvert</span>`;}catch(_){}chargerDashboard();chargerModeles();})();

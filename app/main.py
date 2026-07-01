@@ -14,6 +14,7 @@ from fastapi.staticfiles import StaticFiles
 from app import db, import_csv
 from app.assemblage import construire_plan, resoudre_modele
 from app.config import HTML_DIR, SORTIES_DIR, STATIC_DIR, get_reglages
+from app.correspondance import ajouter_ou_modifier_regle, lister_regles, supprimer_regle
 from app.generation import analyser, generer, generer_depuis_extraction
 from app.models import ExtractionDevis
 from app.modeles import enregistrer_modele, lister_modeles, modeles_presents, supprimer_modele
@@ -261,6 +262,37 @@ def stats_avancees_endpoint() -> dict:
 def modeles_lister() -> dict:
     """État des modèles Excel (attendus présents/manquants + fichiers supplémentaires)."""
     return lister_modeles()
+
+
+@app.get("/correspondances")
+def correspondances_lister() -> dict:
+    """Règles de reconnaissance « texte du devis → modèle » + modèles disponibles."""
+    return {"regles": lister_regles(), "modeles": modeles_presents()}
+
+
+@app.post("/correspondances")
+async def correspondances_enregistrer(regle: dict) -> dict:
+    """Ajoute une règle ou remplace celle du même mot déclencheur."""
+    pattern = (regle.get("pattern") or "").strip()
+    modele = (regle.get("modele") or "").strip()
+    if not pattern or not modele:
+        raise HTTPException(status_code=400, detail="Mot déclencheur et modèle sont requis.")
+    try:
+        ajouter_ou_modifier_regle(
+            pattern, modele, regle.get("categorie") or "", bool(regle.get("est_bungalow"))
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    logger.info("AUDIT règle enregistrée : %s -> %s", pattern, modele)
+    return {"regles": lister_regles(), "modeles": modeles_presents()}
+
+
+@app.delete("/correspondances")
+def correspondances_supprimer(pattern: str) -> dict:
+    """Supprime la règle du mot déclencheur donné."""
+    supprimer_regle(pattern)
+    logger.info("AUDIT règle supprimée : %s", pattern)
+    return {"regles": lister_regles(), "modeles": modeles_presents()}
 
 
 @app.post("/modeles")
