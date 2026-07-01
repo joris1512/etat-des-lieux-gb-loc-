@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import csv
+import io
 import re
 import unicodedata
 from dataclasses import dataclass
