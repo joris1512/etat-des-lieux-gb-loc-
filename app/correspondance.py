@@ -86,12 +86,23 @@ def charger_correspondances(chemin: Path | None = None) -> tuple[EntreeCorrespon
 
 
 def trouver_modele(texte_ligne: str, chemin: Path | None = None) -> EntreeCorrespondance | None:
-    """Renvoie l'entrée dont le motif (le plus long) est contenu dans la ligne, sinon None."""
-    cible = normaliser(texte_ligne)
+    """Renvoie l'entrée la plus SPÉCIFIQUE dont TOUS les mots-clés figurent dans la ligne.
+
+    Correspondance par **mots entiers** (pas par sous-chaîne) : un motif ne s'applique que si
+    chacun de ses mots-clés est présent dans la ligne. Évite les faux positifs (ex. « DOUCHES »
+    ne matche pas « 1 DOUCHE » d'un sanitaire mixte). En cas de plusieurs motifs valides, le plus
+    spécifique gagne : d'abord le plus grand nombre de mots-clés, puis le motif le plus long.
+    """
+    tokens = set(normaliser(texte_ligne).split())
+    meilleur: EntreeCorrespondance | None = None
+    meilleur_score: tuple[int, int] = (0, 0)
     for entree in charger_correspondances(chemin):
-        if entree.pattern_norm and entree.pattern_norm in cible:
-            return entree
-    return None
+        mots = entree.pattern_norm.split()
+        if mots and all(m in tokens for m in mots):
+            score = (len(mots), len(entree.pattern_norm))
+            if score > meilleur_score:
+                meilleur, meilleur_score = entree, score
+    return meilleur
 
 
 def est_prestation(texte_ligne: str) -> bool:

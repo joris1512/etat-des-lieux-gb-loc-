@@ -26,6 +26,9 @@ URINOIR FEMININ,urinoir_feminin.xlsx,sanitaire,false
 WC AUTONOME,wc_autonome.xlsx,sanitaire,false
 GRAND SANITAIRE MIXTE,sanitaire_grand_mixte.xlsx,sanitaire,false
 PETIT SANITAIRE MIXTE,sanitaire_petit_mixte.xlsx,sanitaire,false
-DOUCHE,douches.xlsx,sanitaire,false
+DOUCHES,douches.xlsx,sanitaire,false
+GRAND SANITAIRE DOUCHE,douches.xlsx,sanitaire,false
+1WC 1 DOUCHE 1 URINOIR,sanitaire_petit_mixte.xlsx,sanitaire,false
+1WC 1D 1U,sanitaire_petit_mixte.xlsx,sanitaire,false
 POLYSANI HANDI,polysani_handi.xlsx,sanitaire,false
 POLYSANI,polysani_homme_femme.xlsx,sanitaire,false

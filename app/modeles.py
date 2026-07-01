@@ -28,6 +28,8 @@ def modeles_attendus() -> list[str]:
     noms = {e.modele for e in charger_correspondances()}
     cfg = yaml.safe_load(CONFIG_CELLULES.read_text(encoding="utf-8"))
     noms.add(cfg.get("modele_assemble", "bungalow_assemble.xlsx"))
+    # Modèles bungalow individuels (vide / avec mobilier) référencés hors table de correspondance.
+    noms.update(v for v in (cfg.get("bungalow_individuel") or {}).values() if v)
     return sorted(noms)
 
 
