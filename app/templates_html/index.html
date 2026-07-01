@@ -497,14 +497,14 @@
 
     /* GÉNÉRATION */
     const pdf=$('#pdf'),pdfChip=$('#pdf-chip'),btnGen=$('#btn-gen'),btnDemo=$('#btn-demo'),loading=$('#loading'),loadStep=$('#loading-step'),genResult=$('#gen-result'),genUpload=$('#gen-upload'),genReview=$('#gen-review');
-    let revExtraction=null,revApercu=null;
+    let revExtraction=null,revApercu=null,revModeles=[];
     bindDrag($('#zone-pdf'),pdf);
     pdf.addEventListener('change',()=>pdfChip.innerHTML=pdf.files.length?`<span class="file-chip">${I.file}${esc(pdf.files[0].name)}<span class="sz">· ${ko(pdf.files[0].size)}</span></span>`:'');
     let stepTimer=null;const STEPS=['Lecture du devis…','Repérage des modules…','Sélection des modèles…','Application des assemblages…','Remplissage des fichiers…','Enrichissement de la base…'];
     function startLoading(){genResult.innerHTML='';loading.style.display='flex';btnGen.disabled=btnDemo.disabled=true;let i=0;loadStep.textContent=STEPS[0];stepTimer=setInterval(()=>{i=(i+1)%STEPS.length;loadStep.textContent=STEPS[i];},1400);}
     function stopLoading(){clearInterval(stepTimer);loading.style.display='none';btnGen.disabled=btnDemo.disabled=false;}
     async function analyserDevis(demo){const fd=new FormData();if(demo)fd.append('utiliser_fixture','true');else if(pdf.files.length)fd.append('fichier',pdf.files[0]);else{toast('Sélectionnez d\'abord un devis PDF.','bad');return;}startLoading();
-      try{const r=await fetch('/analyser',{method:'POST',body:fd});const data=await r.json();if(!r.ok)throw new Error(data.detail||'Lecture impossible');revExtraction=data.extraction;revApercu=data.apercu;renderReview();genUpload.style.display='none';genResult.innerHTML='';genReview.style.display='block';window.scrollTo({top:0,behavior:'smooth'});}
+      try{const r=await fetch('/analyser',{method:'POST',body:fd});const data=await r.json();if(!r.ok)throw new Error(data.detail||'Lecture impossible');revExtraction=data.extraction;revApercu=data.apercu;revModeles=data.modeles||[];renderReview();genUpload.style.display='none';genResult.innerHTML='';genReview.style.display='block';window.scrollTo({top:0,behavior:'smooth'});}
       catch(e){genResult.innerHTML=`<div class="card"><div class="alert err">${I.alert}<div><div class="at">Lecture du devis impossible</div>${esc(e.message)}</div></div></div>`;}finally{stopLoading();}}
 
     const ENT_FIELDS=[
@@ -519,9 +519,11 @@
       ENT_FIELDS.forEach(([grp,fields])=>{h+='<div class="sub-h">'+esc(grp)+'</div><div class="fgrid">';fields.forEach(([k,lab])=>{h+=`<div class="field"><label>${esc(lab)}</label><input data-ent="${k}" value="${esc(e[k]||'')}"></div>`;});h+='</div>';});
       h+='</div>';
       h+='<div class="card"><div class="card-h"><span class="ic">'+I.layers+'</span> Modules détectés · '+arts.length+'<span style="margin-left:auto;color:var(--faint);font-weight:400;text-transform:none;letter-spacing:0">décochez pour exclure</span></div>';
-      arts.forEach((a,i)=>{const tag=a.est_bungalow?'<span class="mtag b">bungalow</span>':'<span class="mtag s">sanitaire</span>';
+      const selStyle='width:100%;margin-top:8px;height:38px;background:var(--surface);color:var(--ink);border:1px solid var(--bd2);border-radius:var(--rc);padding:0 10px;font-family:var(--sans);font-size:13px';
+      const optsModele=(sel)=>`<option value="">— état des lieux à choisir —</option>`+revModeles.map(m=>`<option value="${esc(m)}"${m===sel?' selected':''}>${esc(m.replace(/\.xlsx$/,''))}</option>`).join('');
+      arts.forEach((a,i)=>{const reco=!!a.modele;const tag=a.est_bungalow?'<span class="mtag b">bungalow</span>':'<span class="mtag s">sanitaire</span>';const warn=reco?'':'<span class="mtag s" style="background:#5a3a12;color:#ffcf8f">à choisir</span>';
         const mob=(a.mobilier||[]).map((m,j)=>`<span class="mobitem">${esc(m.designation)}<input type="number" min="0" data-mob="${i}-${j}" value="${m.quantite}"></span>`).join('');
-        h+=`<div class="modrow" id="mod-${i}"><input type="checkbox" class="chk" data-inc="${i}" checked><div><div class="mtxt">${esc(a.texte_ligne)}${tag}</div><input class="bloc" data-bloc="${i}" value="${esc(a.bloc||'')}" placeholder="bloc / unité fonctionnelle">${mob?`<div class="moblist">${mob}</div>`:''}</div></div>`;});
+        h+=`<div class="modrow" id="mod-${i}"><input type="checkbox" class="chk" data-inc="${i}" checked><div><div class="mtxt">${esc(a.texte_ligne)}${tag}${warn}</div><input class="bloc" data-bloc="${i}" value="${esc(a.bloc||'')}" placeholder="bloc / unité fonctionnelle"><select data-modele="${i}" title="État des lieux utilisé (modifiable)" style="${selStyle}">${optsModele(a.modele)}</select>${mob?`<div class="moblist">${mob}</div>`:''}</div></div>`;});
       h+='</div>';
       if(revApercu.non_reconnus&&revApercu.non_reconnus.length){h+='<div class="card"><div class="alert">'+I.alert+'<div><div class="at">Lignes non reconnues (ignorées)</div><ul>';revApercu.non_reconnus.forEach(x=>h+='<li>'+esc(x)+'</li>');h+='</ul></div></div></div>';}
       h+=`<div class="card"><div class="apercu-strip"><span class="big mono">≈ ${revApercu.total}</span><span>états estimés · ${revApercu.assembles} assemblés · ${revApercu.individuels} individuels · ${revApercu.sanitaires} sanitaires</span></div><div class="actions"><button class="btn btn-primary" id="rev-go"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M13 2L3 14h9l-1 8 10-12h-9z"/></svg>Générer les états</button><button class="btn btn-ghost" id="rev-cancel">Annuler</button></div></div>`;
@@ -534,7 +536,7 @@
       const ext=JSON.parse(JSON.stringify(revExtraction));
       genReview.querySelectorAll('[data-ent]').forEach(inp=>ext.entete[inp.dataset.ent]=inp.value.trim());
       const arts=[];
-      ext.articles.forEach((a,i)=>{const inc=genReview.querySelector(`[data-inc="${i}"]`);if(inc&&!inc.checked)return;const bl=genReview.querySelector(`[data-bloc="${i}"]`);if(bl)a.bloc=bl.value.trim()||null;(a.mobilier||[]).forEach((m,j)=>{const mi=genReview.querySelector(`[data-mob="${i}-${j}"]`);if(mi)m.quantite=parseInt(mi.value,10)||0;});arts.push(a);});
+      ext.articles.forEach((a,i)=>{const inc=genReview.querySelector(`[data-inc="${i}"]`);if(inc&&!inc.checked)return;const bl=genReview.querySelector(`[data-bloc="${i}"]`);if(bl)a.bloc=bl.value.trim()||null;const ms=genReview.querySelector(`[data-modele="${i}"]`);if(ms)a.modele=ms.value||null;(a.mobilier||[]).forEach((m,j)=>{const mi=genReview.querySelector(`[data-mob="${i}-${j}"]`);if(mi)m.quantite=parseInt(mi.value,10)||0;});arts.push(a);});
       ext.articles=arts;return ext;
     }
     async function genererRevise(){const ext=collecterReview();genReview.style.display='none';genUpload.style.display='block';startLoading();

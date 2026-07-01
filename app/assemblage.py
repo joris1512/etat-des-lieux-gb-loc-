@@ -41,6 +41,32 @@ def _bungalow_individuel(avec_mobilier: bool) -> str | None:
     return b.get("mobilier" if avec_mobilier else "vide")
 
 
+def _est_bungalow_modele(modele: str, defaut: bool) -> bool:
+    """Devine si un modèle choisi est un bungalow (pour la logique d'assemblage)."""
+    m = (modele or "").lower()
+    if "bungalow" in m:
+        return True
+    if any(k in m for k in ("sanitaire", "wc", "urinoir", "douche", "polysani", "lave", "container", "roulante")):
+        return False
+    return defaut
+
+
+def resoudre_modele(art: ArticleDevis) -> tuple[str, bool] | None:
+    """(modèle, est_bungalow) pour un article. Respecte l'override manuel `art.modele` (choix
+    utilisateur à la révision) ; sinon déduit via la table + variante bungalow vide/mobilier.
+    Renvoie None si le module n'est pas reconnu.
+    """
+    if art.modele:  # choix manuel de l'utilisateur
+        return art.modele, _est_bungalow_modele(art.modele, art.est_bungalow)
+    entree = trouver_modele(art.texte_ligne)
+    if entree is None:
+        return None
+    modele = entree.modele
+    if entree.est_bungalow:  # variante vide / avec mobilier selon le mobilier listé
+        modele = _bungalow_individuel(bool(art.mobilier)) or entree.modele
+    return modele, entree.est_bungalow
+
+
 def _lisible(texte: str | None) -> str:
     """Texte lisible et sûr pour un nom de fichier Windows (sans caractères interdits)."""
     if not texte:
@@ -74,29 +100,26 @@ def construire_plan(extraction: ExtractionDevis) -> PlanGeneration:
         morceaux = [f"{seq:02d}", client] + ([quoi] if quoi else []) + [type_label]
         return " - ".join(morceaux) + ".xlsx"
 
-    # Résolution modèle + nature pour chaque article (en filtrant prestations / non reconnus).
+    # Résolution modèle + nature pour chaque article (override manuel prioritaire, sinon déduction).
     resolus: list[tuple[ArticleDevis, str, bool]] = []  # (article, modele, est_bungalow)
     for art in extraction.articles:
-        entree = trouver_modele(art.texte_ligne)
-        if entree is None:
-            if not est_prestation(art.texte_ligne):
-                plan.non_reconnus.append(art.texte_ligne)
-            continue  # prestation -> ignorée silencieusement
         # Normalise le bloc : "" ou blanc => None (évite de fusionner des modules sans étiquette).
         art.bloc = (art.bloc or "").strip() or None
-        # La table fait foi pour le type ; on signale une divergence avec l'indice du LLM.
-        if art.est_bungalow != entree.est_bungalow:
-            attendu = "bungalow" if entree.est_bungalow else "non-bungalow"
+        res = resoudre_modele(art)
+        if res is None:
+            if not est_prestation(art.texte_ligne):
+                plan.non_reconnus.append(art.texte_ligne)
+            continue  # prestation / non reconnu -> pas d'état
+        modele, est_bung = res
+        # En résolution automatique, on signale une divergence de type devis (LLM) vs table.
+        if art.modele is None and est_bung != art.est_bungalow:
+            attendu = "bungalow" if est_bung else "non-bungalow"
             lu = "bungalow" if art.est_bungalow else "non-bungalow"
             plan.avertissements.append(
                 f"Type incertain pour « {art.texte_ligne} » : devis lu comme {lu}, "
                 f"table = {attendu} (la table fait foi)."
             )
-        # Pour un bungalow : on choisit la variante vide / avec mobilier selon le mobilier listé.
-        modele = entree.modele
-        if entree.est_bungalow:
-            modele = _bungalow_individuel(bool(art.mobilier)) or entree.modele
-        resolus.append((art, modele, entree.est_bungalow))
+        resolus.append((art, modele, est_bung))
 
     # Regroupement en "runs" de bungalows consécutifs du même bloc.
     run: list[tuple[ArticleDevis, str]] = []  # (article, modele) du bungalow standard

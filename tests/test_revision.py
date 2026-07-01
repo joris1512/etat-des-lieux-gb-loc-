@@ -31,6 +31,15 @@ def test_entete_revisee_enrichit_la_base():
     assert any(c["numero_client"] == "Z9" and c["raison_sociale"] == "CLIENT CORRIGÉ" for c in clients)
 
 
+def test_override_modele_par_module():
+    from app.assemblage import construire_plan
+
+    ext = charger_fixture()
+    ext.articles[0].modele = "sanitaire_1wc.xlsx"  # choix manuel de l'utilisateur
+    plan = construire_plan(ext)
+    assert any(e.modele == "sanitaire_1wc.xlsx" for e in plan.etats)
+
+
 def test_mobilier_revise_est_pris_en_compte():
     ext = charger_fixture()
     # Force une quantité de mobilier sur le premier module qui en a.

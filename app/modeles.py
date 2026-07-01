@@ -23,6 +23,12 @@ TAILLE_DECOMPRESSEE_MAX = 150 * 1024 * 1024  # 150 Mo (XML décompressé) — an
 RATIO_MAX = 200  # ratio de décompression max toléré
 
 
+def modeles_presents() -> list[str]:
+    """Noms des modèles .xlsx réellement présents dans templates/ (pour le menu de choix)."""
+    TEMPLATES_DIR.mkdir(parents=True, exist_ok=True)
+    return sorted(p.name for p in TEMPLATES_DIR.glob("*.xlsx") if not p.name.startswith("~$"))
+
+
 def modeles_attendus() -> list[str]:
     """Noms de fichiers attendus = modèles de la table de correspondance + modèle assemblé."""
     noms = {e.modele for e in charger_correspondances()}

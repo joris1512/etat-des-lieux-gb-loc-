@@ -12,11 +12,11 @@ from fastapi.responses import FileResponse, HTMLResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 
 from app import db, import_csv
-from app.assemblage import construire_plan
+from app.assemblage import construire_plan, resoudre_modele
 from app.config import HTML_DIR, SORTIES_DIR, STATIC_DIR, get_reglages
 from app.generation import analyser, generer, generer_depuis_extraction
 from app.models import ExtractionDevis
-from app.modeles import enregistrer_modele, lister_modeles, supprimer_modele
+from app.modeles import enregistrer_modele, lister_modeles, modeles_presents, supprimer_modele
 from app.purge import purger_anciennes_sorties
 from app.securite import auth_configuree, exiger_auth
 
@@ -143,7 +143,17 @@ async def analyser_endpoint(
         extraction = analyser(pdf_bytes, utiliser_fixture=utiliser_fixture)
     except Exception as exc:
         raise HTTPException(status_code=422, detail=f"Lecture du devis impossible : {exc}") from exc
-    return {"extraction": extraction.model_dump(), "apercu": _apercu(extraction)}
+    # Pré-remplit le modèle déduit de chaque module (que l'utilisateur pourra corriger dans l'UI).
+    for art in extraction.articles:
+        if art.modele is None:
+            res = resoudre_modele(art)
+            if res:
+                art.modele = res[0]
+    return {
+        "extraction": extraction.model_dump(),
+        "apercu": _apercu(extraction),
+        "modeles": modeles_presents(),
+    }
 
 
 @app.post("/generer")

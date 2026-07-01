@@ -37,6 +37,13 @@ class ArticleDevis(BaseModel):
         default_factory=list,
         description="Mobilier/équipement gratuit listé sous ce module (tables, chaises, armoires…).",
     )
+    modele: str | None = Field(
+        default=None,
+        description=(
+            "Modèle Excel retenu pour ce module. Pré-rempli automatiquement (déduction), "
+            "mais MODIFIABLE par l'utilisateur à l'étape de révision. None = déduire."
+        ),
+    )
 
 
 class EnteteDevis(BaseModel):
