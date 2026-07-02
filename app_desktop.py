@@ -66,6 +66,13 @@ def _lancer_serveur_process() -> None:
 
 
 def main() -> int:
+    # En .exe « fenêtre » (windowed), sys.stdout/stderr valent None : uvicorn appelle
+    # sys.stdout.isatty() et plante. On fournit un flux neutre pour éviter tout crash.
+    if sys.stdout is None:
+        sys.stdout = open(os.devnull, "w", encoding="utf-8")  # noqa: SIM115
+    if sys.stderr is None:
+        sys.stderr = open(os.devnull, "w", encoding="utf-8")  # noqa: SIM115
+
     # Mode « serveur » (processus enfant) : on sert et on bloque.
     if os.environ.get("GB_SERVEUR") == "1":
         _run_serveur()
