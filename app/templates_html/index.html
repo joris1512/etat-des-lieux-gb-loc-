@@ -460,8 +460,18 @@
             <div class="k">Interlocuteurs</div><div>${contacts}</div>
           </div>
         </div>
-        <div class="card"><div class="card-h"><span class="ic">${I.pin}</span> Chantiers · ${c.chantiers.length} <span style="margin-left:auto;color:var(--faint);font-weight:400;text-transform:none;letter-spacing:0">cliquez pour ouvrir le dossier</span></div>${chantiers}</div>`;
+        <div class="card"><div class="card-h"><span class="ic">${I.pin}</span> Chantiers · ${c.chantiers.length} <span style="margin-left:auto;color:var(--faint);font-weight:400;text-transform:none;letter-spacing:0">cliquez pour ouvrir le dossier</span></div>${chantiers}</div>
+        <div class="card" style="display:flex;align-items:center;gap:14px;flex-wrap:wrap">
+          <div style="flex:1;min-width:260px"><div class="card-h" style="margin:0 0 4px">Confidentialité (RGPD)</div><span class="hint">Efface définitivement la fiche, ses contacts, chantiers, devis, documents générés et les traces du journal.</span></div>
+          <button type="button" class="btn btn-danger" id="cd-rgpd">${I.trash} Effacer ce client (RGPD)</button>
+        </div>`;
       $('#cd-back').addEventListener('click',chargerClients);
+      $('#cd-rgpd').addEventListener('click',async()=>{
+        if(!confirm(`Effacer définitivement « ${c.raison_sociale} » et toutes ses données (contacts, chantiers, devis, documents) ?\nCette action est irréversible.`))return;
+        try{const r=await fetch('/clients/'+c.id,{method:'DELETE'});const d=await r.json();if(!r.ok)throw new Error(d.detail||'Erreur');
+          toast('Client effacé (RGPD).','ok');chargerClients();chargerDashboard();}
+        catch(e){toast(e.message,'bad');}
+      });
       $('#client-detail').querySelectorAll('[data-ch]').forEach(el=>el.addEventListener('click',()=>ouvrirChantier(el.dataset.ch)));
       masquerClients();$('#client-detail').style.display='block';window.scrollTo({top:0,behavior:'smooth'});
     }

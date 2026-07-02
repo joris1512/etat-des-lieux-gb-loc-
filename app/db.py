@@ -112,6 +112,46 @@ def _vide(v) -> bool:
     return v is None or str(v).strip() == ""
 
 
+def supprimer_client(client_id: int) -> list[str] | None:
+    """Efface un client et TOUTES ses données personnelles (RGPD — droit à l'effacement).
+
+    Supprime : fiche client, interlocuteurs et chantiers (cascade), devis, générations et
+    fichiers associés, ainsi que les entrées de journal citant le client. Une trace minimale
+    et anonyme (id seul) est conservée dans le journal.
+    Renvoie la liste des job_id dont les dossiers de sortie sont à purger, ou None si inconnu.
+    """
+    _ensure()
+    now = datetime.now()
+    iso, aff = now.isoformat(timespec="seconds"), now.strftime("%d/%m/%Y · %H:%M")
+    with _conn() as cx:
+        client = cx.execute(
+            "SELECT raison_sociale, numero_client FROM clients WHERE id=?", (client_id,)
+        ).fetchone()
+        if client is None:
+            return None
+        jobs = [
+            r["job_id"]
+            for r in cx.execute(
+                "SELECT job_id FROM generations WHERE client_id=? AND job_id IS NOT NULL",
+                (client_id,),
+            )
+        ]
+        # Générations (les fichiers suivent en cascade) puis devis, puis la fiche
+        # (interlocuteurs et chantiers suivent en cascade).
+        cx.execute("DELETE FROM generations WHERE client_id=?", (client_id,))
+        cx.execute("DELETE FROM devis WHERE client_id=?", (client_id,))
+        cx.execute("DELETE FROM clients WHERE id=?", (client_id,))
+        # Journal : efface les entrées citant le client (nom ou n°) — plus de donnée nominative.
+        cx.execute("DELETE FROM journal WHERE libelle LIKE ?", (f"%{client['raison_sociale']}%",))
+        if client["numero_client"]:
+            cx.execute("DELETE FROM journal WHERE libelle LIKE ?", (f"%{client['numero_client']}%",))
+        cx.execute(
+            "INSERT INTO journal (horodatage, horodatage_aff, type, libelle) VALUES (?,?,?,?)",
+            (iso, aff, "client_supprime", f"Client supprimé sur demande (RGPD) — fiche n° {client_id}"),
+        )
+    return jobs
+
+
 def importer_client(
     *,
     raison_sociale: str = "",

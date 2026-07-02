@@ -16,6 +16,11 @@ cd /d "%~dp0"
  --collect-all anthropic ^
  --hidden-import app.main ^
  "app_desktop.py"
+REM Recopie la cle API dans le logiciel (le .env n'est jamais dans git ni dans l'archive PyInstaller).
+if exist ".env" (
+  copy /y ".env" "dist\GB Etats des lieux\_internal\.env" >nul
+  echo Cle API copiee dans le logiciel.
+)
 echo.
 echo ============================================================
 echo  Termine. Logiciel dans :  dist\GB Etats des lieux\

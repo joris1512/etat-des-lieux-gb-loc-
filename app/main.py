@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+import shutil
 from collections import Counter
 from contextlib import asynccontextmanager
 from pathlib import Path
@@ -241,6 +242,25 @@ def client_detail_endpoint(client_id: int) -> dict:
     if not c:
         raise HTTPException(status_code=404, detail="Client introuvable.")
     return c
+
+
+@app.delete("/clients/{client_id}")
+def client_supprimer_endpoint(client_id: int) -> dict:
+    """Efface un client et toutes ses données (RGPD — droit à l'effacement), fichiers compris."""
+    jobs = db.supprimer_client(client_id)
+    if jobs is None:
+        raise HTTPException(status_code=404, detail="Client introuvable.")
+    # Purge des dossiers de sortie liés (les fichiers portent le nom du client).
+    base = SORTIES_DIR.resolve()
+    purges = 0
+    for job_id in jobs:
+        cible = (SORTIES_DIR / job_id).resolve()
+        if cible.parent == base and cible.exists():  # garde anti-évasion de chemin
+            shutil.rmtree(cible, ignore_errors=True)
+            purges += 1
+    # Journal d'audit volontairement anonyme (pas de donnée nominative dans les logs).
+    logger.info("AUDIT effacement RGPD : fiche client n° %s (%s dossier(s) purgé(s)).", client_id, purges)
+    return {"supprime": True, "dossiers_purges": purges}
 
 
 @app.get("/chantiers/{chantier_id}")

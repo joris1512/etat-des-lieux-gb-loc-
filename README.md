@@ -191,3 +191,20 @@ La page web inclut une rubrique **« Bibliothèque de modèles Excel »** :
   dès qu'elle est joignable au-delà.
 - HTTP en clair convient sur un LAN ; pour une exposition plus large, placer l'appli derrière un
   reverse proxy HTTPS.
+- **Mot de passe jamais stocké en clair** : utiliser `GB_PASSWORD_HASH` (PBKDF2-SHA256, 200 000
+  itérations) généré par `python scripts/hash_password.py`. Anti-force-brute (429 après 8 échecs/IP),
+  comparaison à temps constant, journal d'audit sans donnée nominative inutile.
+
+## Confidentialité (RGPD)
+
+Registre simplifié des traitements de l'outil (usage interne GB Location) :
+
+| Question | Réponse |
+|---|---|
+| **Données traitées** | Raison sociale, n° client, adresses ; noms des interlocuteurs et commerciaux (données personnelles) ; devis et documents générés. |
+| **Finalité** | Pré-remplissage des états des lieux et suivi des dossiers clients (intérêt légitime, relation contractuelle). |
+| **Où** | **En local uniquement** : base SQLite `runtime/gb.db` + fichiers `runtime/sorties/` sur le poste/serveur GB. Aucun service tiers, hors appel d'extraction. |
+| **Sous-traitant** | Le devis PDF est transmis à l'API Anthropic pour extraction (voir leur DPA) ; il n'est pas utilisé pour entraîner des modèles. Minimisation : seul le devis est envoyé, jamais la base clients. |
+| **Durée de conservation** | Documents générés : purge automatique (`GB_RETENTION_HEURES`, ~1 an par défaut). Fiches clients : conservées tant que la relation commerciale existe. |
+| **Droit à l'effacement** | Fiche client → bouton **« Effacer ce client (RGPD) »** : supprime fiche, interlocuteurs, chantiers, devis, documents générés **et** les entrées de journal nominatives. Trace anonyme conservée (id seul). |
+| **Sécurité** | Accès par mot de passe (hash PBKDF2), en-têtes HTTP durcis, anti-force-brute, journal d'audit anonymisé, aucune donnée personnelle dans les logs serveur. |
