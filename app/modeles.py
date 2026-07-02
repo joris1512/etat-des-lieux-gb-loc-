@@ -34,8 +34,10 @@ def modeles_attendus() -> list[str]:
     noms = {e.modele for e in charger_correspondances()}
     cfg = yaml.safe_load(CONFIG_CELLULES.read_text(encoding="utf-8"))
     noms.add(cfg.get("modele_assemble", "bungalow_assemble.xlsx"))
-    # Modèles bungalow individuels (vide / avec mobilier) référencés hors table de correspondance.
-    noms.update(v for v in (cfg.get("bungalow_individuel") or {}).values() if v)
+    if cfg.get("modele_assemble_kit"):
+        noms.add(cfg["modele_assemble_kit"])
+    # Variantes de bungalow individuel, référencées hors table de correspondance (déduction).
+    noms.update(v for v in (cfg.get("bungalow_variantes") or {}).values() if v)
     return sorted(noms)
 
 

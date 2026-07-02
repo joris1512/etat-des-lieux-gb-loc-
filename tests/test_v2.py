@@ -1,0 +1,101 @@
+"""V2 — déduction des variantes de bungalow, assemblé kit, auto-apprentissage, sauvegardes."""
+
+import zipfile
+
+from fastapi.testclient import TestClient
+
+from app import db, sauvegarde
+from app.assemblage import _variante_bungalow, construire_plan
+from app.correspondance import charger_correspondances, trouver_modele
+from app.main import app
+from app.models import ArticleDevis, EnteteDevis, ExtractionDevis, MobilierItem
+
+ENTETE = EnteteDevis(client="X", titre_chantier="Y", adresse="", code_postal="")
+
+
+def _bung(texte="BUNGALOW 15M2", bloc=None, mobilier=None):
+    return ArticleDevis(texte_ligne=texte, bloc=bloc, est_bungalow=True, mobilier=mobilier or [])
+
+
+FRIGO = MobilierItem(designation="ACCESSOIRE REFRIGERATEUR", quantite=1)
+TABLE = MobilierItem(designation="TABLE MODULAIRE RECT. 160X80", quantite=2)
+
+
+def test_variantes_taille():
+    assert _variante_bungalow(_bung("BUNGALOW 8M2 VIDE")) == "bungalow_8m2_vide.xlsx"
+    assert _variante_bungalow(_bung("BUNGALOW 8M2 AVEC COIN SANITAIRE")) == "bungalow_8m2_sanitaire.xlsx"
+    assert _variante_bungalow(_bung("BUNGALOW 20M2")) == "bungalow_20m2_vide.xlsx"
+
+
+def test_variantes_mots_cles():
+    assert _variante_bungalow(_bung("BUNGALOW PETITE ENFANCE")) == "bungalow_petite_enfance.xlsx"
+    assert _variante_bungalow(_bung("BUNGALOW 15M2 COIN SANITAIRE")) == "bungalow_coin_sanitaire.xlsx"
+    assert (
+        _variante_bungalow(_bung("BUNGALOW 15M2 COIN SANITAIRE", mobilier=[FRIGO]))
+        == "bungalow_coin_sanitaire_kitchenette.xlsx"
+    )
+
+
+def test_variante_refectoire_et_mobilier():
+    # Réfectoire avec équipement -> modèle réfectoire-kitchenette.
+    assert (
+        _variante_bungalow(_bung(bloc="REFECTOIRE", mobilier=[FRIGO]))
+        == "bungalow_refectoire_kitchenette.xlsx"
+    )
+    # Mobilier de bureau simple -> modèle avec mobilier ; rien -> vide.
+    assert _variante_bungalow(_bung(bloc="BUREAU", mobilier=[TABLE])) == "bungalow_mobilier.xlsx"
+    assert _variante_bungalow(_bung(bloc="BUREAU")) == "bungalow_vide.xlsx"
+
+
+def test_assemble_kit_si_kitchenette():
+    arts = [
+        _bung(bloc="REFECTOIRE"),
+        _bung(bloc="REFECTOIRE", mobilier=[FRIGO]),
+        _bung(bloc="BUREAUX"),
+        _bung(bloc="BUREAUX", mobilier=[TABLE]),
+    ]
+    plan = construire_plan(ExtractionDevis(entete=ENTETE, articles=arts))
+    assembles = {e.bloc: e.modele for e in plan.etats if e.type_etat == "assemble"}
+    assert assembles["REFECTOIRE"] == "bungalow_assemble_kit.xlsx"
+    assert assembles["BUREAUX"] == "bungalow_assemble.xlsx"
+
+
+def test_generer_revise_apprend_les_corrections(tmp_path, monkeypatch):
+    """Une ligne inconnue + modèle choisi à la main -> règle mémorisée automatiquement."""
+    import shutil
+
+    import app.correspondance as corr
+
+    copie = tmp_path / "correspondances.csv"
+    shutil.copy(corr.CORRESPONDANCES_CSV, copie)  # table isolée : la vraie n'est pas modifiée
+    monkeypatch.setattr(corr, "CORRESPONDANCES_CSV", copie)
+    charger_correspondances.cache_clear()
+    try:
+        ligne = "MODULE ATYPIQUE JAMAIS VU 999"
+        assert trouver_modele(ligne) is None
+        payload = {
+            "entete": {"client": "ACME", "titre_chantier": "", "adresse": "", "code_postal": ""},
+            "articles": [
+                {"texte_ligne": ligne, "bloc": None, "est_bungalow": False,
+                 "quantite": 1, "mobilier": [], "modele": "wc_3.xlsx"}
+            ],
+        }
+        r = TestClient(app).post("/generer-revise", json=payload)
+        assert r.status_code == 200
+        entree = trouver_modele(ligne)
+        assert entree is not None and entree.modele == "wc_3.xlsx"
+        assert any("Règle apprise" in a for a in r.json()["avertissements"])
+    finally:
+        charger_correspondances.cache_clear()
+
+
+def test_sauvegarde_quotidienne(tmp_path, monkeypatch):
+    monkeypatch.setattr(sauvegarde, "DOSSIER", tmp_path / "sauvegardes")
+    db.init_db()  # crée la base isolée du test
+    assert sauvegarde.sauvegarder_quotidienne() is True
+    zips = list((tmp_path / "sauvegardes").glob("gb-*.zip"))
+    assert len(zips) == 1
+    with zipfile.ZipFile(zips[0]) as zf:
+        assert "gb.db" in zf.namelist()
+    # Idempotente le même jour : pas de doublon.
+    assert sauvegarde.sauvegarder_quotidienne() is False

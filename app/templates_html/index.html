@@ -599,7 +599,7 @@
     $('#btn-regle-add').addEventListener('click',enregistrerRegle);
 
     /* Init */
-    (async()=>{try{const s=await(await fetch('/etat')).json();$('#auth-row').innerHTML=s.auth?`<span class="dot"></span><span>Connecté · ${esc(s.utilisateur)}</span>`:`<span class="dot"></span><span>En ligne · accès ouvert</span>`;}catch(_){}chargerDashboard();chargerModeles();})();
+    (async()=>{try{const s=await(await fetch('/etat')).json();const v=s.version?` · v${esc(s.version)}`:'';$('#auth-row').innerHTML=s.auth?`<span class="dot"></span><span>Connecté · ${esc(s.utilisateur)}${v}</span>`:`<span class="dot"></span><span>En ligne${v}</span>`;}catch(_){}chargerDashboard();chargerModeles();})();
   </script>
 </body>
 </html>

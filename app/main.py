@@ -14,8 +14,15 @@ from fastapi.staticfiles import StaticFiles
 
 from app import db, import_csv
 from app.assemblage import construire_plan, resoudre_modele
-from app.config import HTML_DIR, SORTIES_DIR, STATIC_DIR, get_reglages
-from app.correspondance import ajouter_ou_modifier_regle, lister_regles, supprimer_regle
+from app.config import HTML_DIR, SORTIES_DIR, STATIC_DIR, VERSION, get_reglages
+from app.sauvegarde import sauvegarder_quotidienne
+from app.correspondance import (
+    ajouter_ou_modifier_regle,
+    est_prestation,
+    lister_regles,
+    supprimer_regle,
+    trouver_modele,
+)
 from app.generation import analyser, generer, generer_depuis_extraction
 from app.models import ExtractionDevis
 from app.modeles import enregistrer_modele, lister_modeles, modeles_presents, supprimer_modele
@@ -26,9 +33,13 @@ logger = logging.getLogger("uvicorn.error")
 
 @asynccontextmanager
 async def _lifespan(_app: FastAPI):
-    # Base de connaissance + purge des anciennes sorties au démarrage.
+    # Base de connaissance + purge des anciennes sorties + sauvegarde quotidienne au démarrage.
     db.init_db()
     purger_anciennes_sorties()
+    try:
+        sauvegarder_quotidienne()
+    except Exception as exc:  # noqa: BLE001 — la sauvegarde ne doit jamais bloquer le démarrage
+        logger.warning("Sauvegarde quotidienne impossible : %s", exc)
     # État d'authentification visible au démarrage (jamais d'ouverture silencieuse).
     reglages = get_reglages()
     if auth_configuree():
@@ -179,6 +190,23 @@ def generer_revise_endpoint(extraction: ExtractionDevis):
         rapport, job_dir = generer_depuis_extraction(extraction)
     except Exception as exc:
         raise HTTPException(status_code=422, detail=f"Échec de la génération : {exc}") from exc
+    # Auto-apprentissage : si l'utilisateur a choisi un modèle pour une ligne que la table ne
+    # reconnaît pas, on mémorise la règle (ligne exacte -> modèle). Modifiable/supprimable
+    # ensuite dans l'onglet Modèles ; n'écrase jamais une règle existante.
+    for art in extraction.articles:
+        if art.modele and trouver_modele(art.texte_ligne) is None and not est_prestation(art.texte_ligne):
+            try:
+                ajouter_ou_modifier_regle(
+                    art.texte_ligne, art.modele,
+                    categorie="apprise",
+                    est_bungalow="bungalow" in art.modele.lower(),
+                )
+                rapport.avertissements.append(
+                    f"Règle apprise : « {art.texte_ligne} » → {art.modele} (modifiable dans Modèles)."
+                )
+                logger.info("AUDIT règle apprise : %s -> %s", art.texte_ligne, art.modele)
+            except ValueError:
+                pass
     return _reponse_generation(rapport, job_dir)
 
 
@@ -186,7 +214,7 @@ def generer_revise_endpoint(extraction: ExtractionDevis):
 def etat() -> dict:
     """État léger pour l'UI : authentification active et identifiant courant."""
     reglages = get_reglages()
-    return {"auth": auth_configuree(), "utilisateur": reglages.utilisateur}
+    return {"auth": auth_configuree(), "utilisateur": reglages.utilisateur, "version": VERSION}
 
 
 @app.get("/stats")

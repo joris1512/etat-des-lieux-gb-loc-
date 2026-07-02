@@ -10,13 +10,24 @@
 #   mobilier : MOT-CLÉ (cherché dans la désignation du mobilier) -> cellule où reporter la quantité
 #              Le mot-clé le plus long qui correspond gagne.
 
-# Modèle pour l'état "assemblé" (regroupe N bungalows). Référencé automatiquement.
+# Modèles pour l'état "assemblé" (regroupe N bungalows). Le kit (kitchenette) est choisi
+# automatiquement quand le mobilier du bloc contient de l'équipement cuisine.
 modele_assemble: bungalow_assemble.xlsx
+modele_assemble_kit: bungalow_assemble_kit.xlsx
 
-# Modèle du bungalow INDIVIDUEL choisi selon la présence de mobilier sur la ligne du devis.
-bungalow_individuel:
+# Variantes de bungalow INDIVIDUEL — choisies automatiquement par déduction
+# (taille + mots-clés de la ligne/du bloc + mobilier + fonction), modifiables au cas par cas
+# via le menu déroulant de l'étape de révision.
+bungalow_variantes:
   vide: bungalow_vide.xlsx
   mobilier: bungalow_mobilier.xlsx
+  8m2_vide: bungalow_8m2_vide.xlsx
+  8m2_sanitaire: bungalow_8m2_sanitaire.xlsx
+  20m2_vide: bungalow_20m2_vide.xlsx
+  coin_sanitaire: bungalow_coin_sanitaire.xlsx
+  coin_sanitaire_kitchenette: bungalow_coin_sanitaire_kitchenette.xlsx
+  refectoire_kitchenette: bungalow_refectoire_kitchenette.xlsx
+  petite_enfance: bungalow_petite_enfance.xlsx
 
 # Fonctions de bungalow reconnues -> texte canonique reporté sur la ligne « fonction ».
 # Pour chaque fonction, les mots-clés cherchés dans le « bloc » du devis (après normalisation :
@@ -63,10 +74,16 @@ modeles:
     entete: {client: E5, titre_chantier: E7}
     entete_format: {client: "Client : {valeur}", titre_chantier: "Chantier : {valeur}"}
     mobilier: {}
+  # Assemblés : VRAIS modèles dédiés (« BUNG ASSEMBLES », variante kit = kitchenette).
   bungalow_assemble.xlsx:
-    feuille: BUNGALOWS ASSEMBLES
-    fonction: B12
-    entete: {client: E5, titre_chantier: E7}
+    feuille: "Bungalows Assemblés"
+    entete: {client: E6, titre_chantier: E7}
+    entete_format: {client: "Client : {valeur}", titre_chantier: "Chantier : {valeur}"}
+    fonctions_cellules: {REFECTOIRE: C12, BUREAU: E12, SALLE DE REUNION: G12}
+    mobilier: {}
+  bungalow_assemble_kit.xlsx:
+    feuille: "Bungalows Assemblés"
+    entete: {client: E6, titre_chantier: E7}
     entete_format: {client: "Client : {valeur}", titre_chantier: "Chantier : {valeur}"}
     mobilier: {}
   # --- Bungalows individuels RÉELS : vide / avec mobilier. En-tête E5/E6 (CLIENT : / CHANTIER :).
@@ -82,6 +99,53 @@ modeles:
     entete: {client: E5, titre_chantier: E6}
     entete_format: {client: "CLIENT : {valeur}", titre_chantier: "CHANTIER : {valeur}"}
     fonctions_cellules: {SALLE DE REUNION: B8, VESTIAIRE: D8, BUREAU: E8, REFECTOIRE: G8}
+    mobilier: {}
+  # --- Variantes de bungalow (VRAIS modèles du dossier « ungalow ») ---
+  bungalow_8m2_vide.xlsx:
+    feuille: "Bungalow 8M²"
+    entete: {client: E5, titre_chantier: E6}
+    entete_format: {client: "CLIENT : {valeur}", titre_chantier: "CHANTIER : {valeur}"}
+    fonctions_cellules: {REFECTOIRE: B8, BUREAU: D8, SALLE DE REUNION: E8, VESTIAIRE: G8}
+    mobilier: {}
+  bungalow_8m2_sanitaire.xlsx:
+    feuille: "Bungalow 8M² coin Sanitaire"
+    entete: {client: E5, titre_chantier: E7}
+    entete_format: {client: "CLIENT : {valeur}", titre_chantier: "CHANTIER : {valeur}"}
+    fonctions_cellules: {REFECTOIRE: B9, BUREAU: D9, SALLE DE REUNION: E9, VESTIAIRE: G9}
+    mobilier: {}
+  bungalow_20m2_vide.xlsx:
+    feuille: "Bungalow vide"
+    entete: {client: E5, titre_chantier: E6}
+    entete_format: {client: "CLIENT : {valeur}", titre_chantier: "CHANTIER : {valeur}"}
+    mobilier: {}
+  bungalow_coin_sanitaire.xlsx:
+    feuille: "Bungalow avec coin Sanitaire"
+    entete: {client: E5, titre_chantier: E6}
+    entete_format: {client: "CLIENT : {valeur}", titre_chantier: "CHANTIER : {valeur}"}
+    fonctions_cellules: {REFECTOIRE: B8, BUREAU: D8, SALLE DE REUNION: E8, VESTIAIRE: G8}
+    mobilier: {}
+  bungalow_coin_sanitaire_kitchenette.xlsx:
+    feuille: "Bungalow coin Sanit + Kitch"
+    entete: {client: E5, titre_chantier: E6}
+    entete_format: {client: "CLIENT : {valeur}", titre_chantier: "CHANTIER : {valeur}"}
+    fonctions_cellules: {REFECTOIRE: B8, BUREAU: D8, SALLE DE REUNION: E8, VESTIAIRE: G8}
+    mobilier: {}
+  bungalow_refectoire_kitchenette.xlsx:
+    feuille: "Bungalow coin Sanit + Kitch"
+    entete: {client: E5, titre_chantier: E6}
+    entete_format: {client: "CLIENT : {valeur}", titre_chantier: "CHANTIER : {valeur}"}
+    fonctions_cellules: {REFECTOIRE: D8}
+    mobilier: {}
+  bungalow_petite_enfance.xlsx:
+    feuille: "Bungalow vide"
+    entete: {client: E5, titre_chantier: E6}
+    entete_format: {client: "CLIENT : {valeur}", titre_chantier: "CHANTIER : {valeur}"}
+    fonctions_cellules: {REFECTOIRE: B8, BUREAU: D8, SALLE DE REUNION: E8, VESTIAIRE: G8}
+    mobilier: {}
+  bungalow_lavabos.xlsx:
+    feuille: "Bungalow lavabo"
+    entete: {client: E5, titre_chantier: E6}
+    entete_format: {client: "CLIENT : {valeur}", titre_chantier: "CHANTIER : {valeur}"}
     mobilier: {}
   # --- Sanitaire 1WC : VRAI modèle (BLOC 1 WC). En-tête « CLIENT : » / « CHANTIER : » en E5/E7. ---
   sanitaire_1wc.xlsx:

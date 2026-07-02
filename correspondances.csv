@@ -13,7 +13,11 @@ PETIT SANITAIRE W1WC SOLO,sanitaire_1wc.xlsx,sanitaire,false
 BUNGALOW 15m2 BATISO 2WC DONT 1 PMR,sanitaire_2wc_pmr.xlsx,sanitaire,false
 BUNGALOW 15 M2 2WC 2D 2U,sanitaire_2wc_2d_2u.xlsx,sanitaire,false
 CONTAINERS 6M,container_6m.xlsx,autre,false
+BUNGALOW LAVABOS,bungalow_lavabos.xlsx,sanitaire,false
+4 AUGES,bungalow_lavabos.xlsx,sanitaire,false
 BUNGALOW 15M2,bungalow_15m2.xlsx,bungalow,true
+BUNGALOW,bungalow_vide.xlsx,bungalow,true
+BUNG,bungalow_vide.xlsx,bungalow,true
 1 WC PMR,wc_1_pmr.xlsx,sanitaire,false
 2WCH,wc_2.xlsx,sanitaire,false
 3WC,wc_3.xlsx,sanitaire,false
