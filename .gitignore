@@ -24,3 +24,8 @@ Thumbs.db
 # Modèles réels convertis (.xls -> .xlsx) : copies dérivées des originaux du client,
 # régénérables, gardées hors dépôt.
 modeles_reels/
+
+# Empaquetage PyInstaller (logiciel .exe) — régénérable via build_exe.bat
+build/
+dist/
+*.spec

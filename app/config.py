@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import sys
 from functools import lru_cache
 from pathlib import Path
 
@@ -9,7 +10,14 @@ from pydantic import Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 # Racine du projet = dossier parent de `app/`.
-RACINE = Path(__file__).resolve().parents[1]
+# En mode « figé » (.exe PyInstaller --onedir), la racine est le dossier de l'exécutable
+# (les données templates/ config/ … y sont livrées à côté, et restent modifiables).
+if getattr(sys, "frozen", False):
+    # PyInstaller --onedir : les données livrées (--add-data) sont dans le dossier `_internal`
+    # exposé via sys._MEIPASS ; ce dossier est réel et modifiable (règles, modèles, runtime).
+    RACINE = Path(getattr(sys, "_MEIPASS", Path(sys.executable).resolve().parent))
+else:
+    RACINE = Path(__file__).resolve().parents[1]
 
 TEMPLATES_DIR = RACINE / "templates"
 CONFIG_CELLULES = RACINE / "config" / "cellules.yaml"
