@@ -87,6 +87,13 @@ Routes clés : `/` (UI), `/analyser`, `/generer`, `/generer-revise`, `/telecharg
   `app/fonctions.py` + section `fonctions:` de `config/cellules.yaml` ; report sur `EtatDesLieux.fonction`
   (assemblage) ; **remplacement** de la cellule fonction dans `remplissage.py` (clé `fonction:` par modèle).
   Testé (62 tests verts, ruff clean) et **validé sur le vrai modèle bungalow** (cellules réelles E5/E7/A9).
+- v3 : **vrais modèles branchés** (bungalows vide/mobilier/assemblé + 15 sanitaires + conteneur ;
+  moteur `patch_xlsx` qui préserve logo + perspectives) ; **menu déroulant par module** (choix auto +
+  correction manuelle) ; **éditeur de règles** dans l'UI ; **import CSV clients** ; **application de
+  bureau .exe** (pywebview + PyInstaller, `build_exe.bat`) ; **audit RGPD** : effacement client complet
+  (base + fichiers + journal ciblé par client_id), fixture pseudonymisée, rétention 8760 h alignée sur
+  le registre README, écoute 127.0.0.1 par défaut, mot de passe haché (PBKDF2), logs minimisés.
+  (77 tests verts.)
 
 **Reste à faire (prochaines briques) :**
 1. **Brancher les vrais modèles.** Les `.xls` du client (dans `P:\Joris\etat des lieux`, **originaux à ne
