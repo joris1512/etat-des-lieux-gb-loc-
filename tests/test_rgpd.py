@@ -70,6 +70,30 @@ def test_suppression_conserve_les_autres_clients():
     assert "AUTRE SOCIETE" in restants
 
 
+def test_purge_journal_ciblee_epargne_les_autres_clients():
+    """Régression : la purge du journal ne doit pas sur-effacer (ex. n° client court « 7 »)."""
+    db.importer_client(raison_sociale="CIBLE A EFFACER SARL", numero_client="7")
+    db.importer_client(raison_sociale="TIERS INNOCENT SAS", numero_client="77")
+    ids = {c["raison_sociale"]: c["id"] for c in db.lister_clients()}
+    with db._conn() as cx:
+        cx.execute(
+            "INSERT INTO journal (horodatage, horodatage_aff, type, libelle, client_id) "
+            "VALUES ('t','t','x','Entrée du client cible', ?)",
+            (ids["CIBLE A EFFACER SARL"],),
+        )
+        cx.execute(
+            "INSERT INTO journal (horodatage, horodatage_aff, type, libelle, client_id) "
+            "VALUES ('t','t','x','Note 7 chantiers pour TIERS INNOCENT SAS', ?)",
+            (ids["TIERS INNOCENT SAS"],),
+        )
+    db.supprimer_client(ids["CIBLE A EFFACER SARL"])
+    with db._conn() as cx:
+        restants = [r["libelle"] for r in cx.execute("SELECT libelle FROM journal")]
+    assert not any("cible" in x.lower() for x in restants)
+    # L'entrée du tiers (qui contient pourtant « 7 ») est intacte : plus de LIKE sur le n°.
+    assert any("TIERS INNOCENT" in x for x in restants)
+
+
 def test_fixture_eiffage_intacte():
     """Garde-fou : la fixture de démo n'est pas touchée par les tests d'effacement."""
     assert charger_fixture().entete.client == "EIFFAGE TRX MARITIMES FLUVIAUX"

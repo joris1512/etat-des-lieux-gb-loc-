@@ -189,8 +189,9 @@ La page web inclut une rubrique **« Bibliothèque de modèles Excel »** :
   les routes — important car la rubrique « Bibliothèque de modèles » permet de modifier/supprimer
   des modèles. Sur réseau interne de confiance, l'appli peut tourner sans, mais c'est déconseillé
   dès qu'elle est joignable au-delà.
-- HTTP en clair convient sur un LAN ; pour une exposition plus large, placer l'appli derrière un
-  reverse proxy HTTPS.
+- **Écoute locale par défaut** (`GB_HOST=127.0.0.1`) : l'appli n'est joignable que depuis le poste.
+  N'ouvrir au LAN (`0.0.0.0`) qu'avec un reverse proxy **HTTPS** devant — en HTTP clair, les
+  identifiants Basic et les données transitent en clair sur le réseau.
 - **Mot de passe jamais stocké en clair** : utiliser `GB_PASSWORD_HASH` (PBKDF2-SHA256, 200 000
   itérations) généré par `python scripts/hash_password.py`. Anti-force-brute (429 après 8 échecs/IP),
   comparaison à temps constant, journal d'audit sans donnée nominative inutile.
@@ -206,5 +207,6 @@ Registre simplifié des traitements de l'outil (usage interne GB Location) :
 | **Où** | **En local uniquement** : base SQLite `runtime/gb.db` + fichiers `runtime/sorties/` sur le poste/serveur GB. Aucun service tiers, hors appel d'extraction. |
 | **Sous-traitant** | Le devis PDF est transmis à l'API Anthropic pour extraction (voir leur DPA) ; il n'est pas utilisé pour entraîner des modèles. Minimisation : seul le devis est envoyé, jamais la base clients. |
 | **Durée de conservation** | Documents générés : purge automatique (`GB_RETENTION_HEURES`, ~1 an par défaut). Fiches clients : conservées tant que la relation commerciale existe. |
-| **Droit à l'effacement** | Fiche client → bouton **« Effacer ce client (RGPD) »** : supprime fiche, interlocuteurs, chantiers, devis, documents générés **et** les entrées de journal nominatives. Trace anonyme conservée (id seul). |
+| **Droit d'accès** | La fiche client (UI) et `GET /clients/{id}` restituent l'intégralité des données détenues sur un client — réponse immédiate à une demande d'accès. |
+| **Droit à l'effacement** | Fiche client → bouton **« Effacer ce client (RGPD) »** : supprime fiche, interlocuteurs, chantiers, devis, documents générés **et** les entrées de journal (purge ciblée par identifiant). Trace anonyme conservée (id seul). ⚠️ Ne couvre pas d'éventuels snapshots/sauvegardes du serveur de fichiers — à traiter dans la politique de sauvegarde. |
 | **Sécurité** | Accès par mot de passe (hash PBKDF2), en-têtes HTTP durcis, anti-force-brute, journal d'audit anonymisé, aucune donnée personnelle dans les logs serveur. |

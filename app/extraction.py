@@ -26,8 +26,8 @@ Tu dois remplir l'outil `enregistrer_devis` avec :
 1) entete — distingue bien le CLIENT (destinataire/facturation) du CHANTIER (lieu d'utilisation) :
    • client : raison sociale du client (ex. « EIFFAGE TRX MARITIMES FLUVIAUX »).
    • numero_client : le « N° Client » figurant dans le cartouche (ex. « 007433 »).
-   • interlocuteur : la personne « À l'attention de … » (ex. « Mme ENOLA COFFIN »).
-   • commercial : le commercial GB (ligne « Commercial : … », ex. « CELINE BRARD »).
+   • interlocuteur : la personne « À l'attention de … » (ex. « Mme CAMILLE EXEMPLE »).
+   • commercial : le commercial GB (ligne « Commercial : … », ex. « DOMINIQUE DEMO »).
    • adresse_client, code_postal_client, ville_client : l'adresse du CLIENT (bloc destinataire,
      ex. « 3 A 7 PLACE DE L'EUROPE » / « 78140 » / « VELIZY VILLACOUBLAY »).
    • numero_offre : le « N° Offre » (ex. « GB00007589/L »).

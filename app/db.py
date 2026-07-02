@@ -100,6 +100,10 @@ def init_db() -> None:
         cols = [r["name"] for r in cx.execute("PRAGMA table_info(generations)")]
         if "chantier_id" not in cols:
             cx.execute("ALTER TABLE generations ADD COLUMN chantier_id INTEGER")
+        # Migration douce : rattache le journal au client (purge RGPD ciblée, sans LIKE hasardeux).
+        cols_j = [r["name"] for r in cx.execute("PRAGMA table_info(journal)")]
+        if "client_id" not in cols_j:
+            cx.execute("ALTER TABLE journal ADD COLUMN client_id INTEGER")
     _pret = True
 
 
@@ -141,10 +145,11 @@ def supprimer_client(client_id: int) -> list[str] | None:
         cx.execute("DELETE FROM generations WHERE client_id=?", (client_id,))
         cx.execute("DELETE FROM devis WHERE client_id=?", (client_id,))
         cx.execute("DELETE FROM clients WHERE id=?", (client_id,))
-        # Journal : efface les entrées citant le client (nom ou n°) — plus de donnée nominative.
+        # Journal : purge ciblée par client_id ; le LIKE sur la raison sociale ne sert que pour
+        # les anciennes entrées créées avant la colonne client_id (nom d'entreprise = long,
+        # collision improbable ; surtout pas de LIKE sur le n° client, trop court).
+        cx.execute("DELETE FROM journal WHERE client_id=?", (client_id,))
         cx.execute("DELETE FROM journal WHERE libelle LIKE ?", (f"%{client['raison_sociale']}%",))
-        if client["numero_client"]:
-            cx.execute("DELETE FROM journal WHERE libelle LIKE ?", (f"%{client['numero_client']}%",))
         cx.execute(
             "INSERT INTO journal (horodatage, horodatage_aff, type, libelle) VALUES (?,?,?,?)",
             (iso, aff, "client_supprime", f"Client supprimé sur demande (RGPD) — fiche n° {client_id}"),
@@ -231,10 +236,12 @@ def enrichir_et_enregistrer(*, entete, counts, fichiers, job_id, zip_nom) -> dic
     appris: list[str] = []
 
     with _conn() as cx:
-        def evt(type_, libelle):
+        def evt(type_, libelle, cid=None):
+            # cid = client concerné : permet la purge RGPD ciblée du journal (voir supprimer_client).
             cx.execute(
-                "INSERT INTO journal (horodatage, horodatage_aff, type, libelle) VALUES (?,?,?,?)",
-                (iso, aff, type_, libelle),
+                "INSERT INTO journal (horodatage, horodatage_aff, type, libelle, client_id) "
+                "VALUES (?,?,?,?,?)",
+                (iso, aff, type_, libelle, cid),
             )
             appris.append(libelle)
 
@@ -259,7 +266,8 @@ def enrichir_et_enregistrer(*, entete, counts, fichiers, job_id, zip_nom) -> dic
             )
             client_id = int(cur.lastrowid)
             evt("client_nouveau", f"Nouveau client : {entete.client or '—'}"
-                + (f" (n° {entete.numero_client})" if not _vide(entete.numero_client) else ""))
+                + (f" (n° {entete.numero_client})" if not _vide(entete.numero_client) else ""),
+                cid=client_id)
         else:
             client_id = client["id"]
             # Enrichit les champs manquants SANS écraser l'existant.
@@ -279,7 +287,7 @@ def enrichir_et_enregistrer(*, entete, counts, fichiers, job_id, zip_nom) -> dic
                 "SELECT adresse, code_postal, ville, numero_client FROM clients WHERE id=?", (client_id,)
             ).fetchone()
             if tuple(apres) != avant:
-                evt("client_enrichi", f"Fiche client complétée : {entete.client or '—'}")
+                evt("client_enrichi", f"Fiche client complétée : {entete.client or '—'}", cid=client_id)
 
         # --- Interlocuteur ---
         if not _vide(entete.interlocuteur):
@@ -292,7 +300,8 @@ def enrichir_et_enregistrer(*, entete, counts, fichiers, job_id, zip_nom) -> dic
                     "INSERT INTO interlocuteurs (client_id, nom, premiere_vue, derniere_vue) VALUES (?,?,?,?)",
                     (client_id, entete.interlocuteur, iso, iso),
                 )
-                evt("contact_nouveau", f"Nouveau contact : {entete.interlocuteur} ({entete.client})")
+                evt("contact_nouveau", f"Nouveau contact : {entete.interlocuteur} ({entete.client})",
+                    cid=client_id)
             else:
                 cx.execute("UPDATE interlocuteurs SET derniere_vue=? WHERE id=?", (iso, ex["id"]))
 
@@ -310,7 +319,8 @@ def enrichir_et_enregistrer(*, entete, counts, fichiers, job_id, zip_nom) -> dic
                     (client_id, entete.titre_chantier, entete.adresse, entete.code_postal, entete.ville, iso, iso),
                 )
                 chantier_id = int(cur.lastrowid)
-                evt("chantier_nouveau", f"Nouveau chantier : {entete.titre_chantier} ({entete.client})")
+                evt("chantier_nouveau", f"Nouveau chantier : {entete.titre_chantier} ({entete.client})",
+                    cid=client_id)
             else:
                 chantier_id = ex["id"]
                 cx.execute("UPDATE chantiers SET derniere_vue=? WHERE id=?", (iso, chantier_id))
@@ -326,7 +336,8 @@ def enrichir_et_enregistrer(*, entete, counts, fichiers, job_id, zip_nom) -> dic
                     (entete.numero_offre, client_id, chantier_id, entete.commercial, entete.date_devis, iso),
                 )
                 devis_id = int(cur.lastrowid)
-                evt("devis_nouveau", f"Devis enregistré : {entete.numero_offre} ({entete.client})")
+                evt("devis_nouveau", f"Devis enregistré : {entete.numero_offre} ({entete.client})",
+                    cid=client_id)
             else:
                 devis_id = ex["id"]
                 cx.execute(

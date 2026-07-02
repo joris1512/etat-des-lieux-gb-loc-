@@ -115,7 +115,7 @@ def exiger_auth(
         return
 
     _echec(ip)
-    logger.warning(
-        "AUDIT auth: échec (utilisateur « %s ») depuis %s", credentials.username, ip
-    )
+    # On ne journalise PAS l'identifiant saisi : un mot de passe tapé par erreur dans le champ
+    # « utilisateur » finirait en clair dans les logs (minimisation, art. 5 RGPD).
+    logger.warning("AUDIT auth: échec d'authentification depuis %s", ip)
     raise non_authentifie
