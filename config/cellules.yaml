@@ -81,11 +81,20 @@ modeles:
     entete_format: {client: "Client : {valeur}", titre_chantier: "Chantier : {valeur}"}
     fonctions_cellules: {REFECTOIRE: C12, BUREAU: E12, SALLE DE REUNION: G12}
     mobilier: {}
+    # L'état assemblé porte le MOBILIER du bloc : lignes d'inventaire A43-A47.
+    mobilier_lignes:
+      A43: "Chaise : {CHAISE}"
+      A44: "Table : {TABLE}"
+      A45: "Armoire doubles : {ARMOIRE}"
+      A46: "Caisson : {CAISSON}"
+      A47: "Banc : {BANC}"
   bungalow_assemble_kit.xlsx:
     feuille: "Bungalows Assemblés"
     entete: {client: E6, titre_chantier: E7}
     entete_format: {client: "Client : {valeur}", titre_chantier: "Chantier : {valeur}"}
     mobilier: {}
+    mobilier_lignes:
+      A36: "Evier : {EVIER}"
   # --- Bungalows individuels RÉELS : vide / avec mobilier. En-tête E5/E6 (CLIENT : / CHANTIER :).
   #     Fonction = 4 cases séparées (réunion B8 / vestiaire D8 / bureau E8 / réfectoire G8). ---
   bungalow_vide.xlsx:
@@ -100,6 +109,9 @@ modeles:
     entete_format: {client: "CLIENT : {valeur}", titre_chantier: "CHANTIER : {valeur}"}
     fonctions_cellules: {SALLE DE REUNION: B8, VESTIAIRE: D8, BUREAU: E8, REFECTOIRE: G8}
     mobilier: {}
+    # Ligne d'inventaire (cellule multi-lignes A46) : quantités reportées après chaque libellé.
+    mobilier_lignes:
+      A46: "Chaises  :  {CHAISE}\nTables :   {TABLE}\nArmoires doubles : {ARMOIRE}"
   # --- Variantes de bungalow (VRAIS modèles du dossier « ungalow ») ---
   bungalow_8m2_vide.xlsx:
     feuille: "Bungalow 8M²"
@@ -136,6 +148,10 @@ modeles:
     entete_format: {client: "CLIENT : {valeur}", titre_chantier: "CHANTIER : {valeur}"}
     fonctions_cellules: {REFECTOIRE: D8}
     mobilier: {}
+    # Section MOBILIERS du réfectoire (la kitchenette est déjà pré-remplie sur le modèle).
+    mobilier_lignes:
+      A49: "Tables : {TABLE}"
+      A50: "Chaises : {CHAISE}"
   bungalow_petite_enfance.xlsx:
     feuille: "Bungalow vide"
     entete: {client: E5, titre_chantier: E6}

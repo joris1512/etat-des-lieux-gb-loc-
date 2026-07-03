@@ -9,6 +9,7 @@ réserves ou signatures.
 
 from __future__ import annotations
 
+import re
 from functools import lru_cache
 from pathlib import Path
 
@@ -49,6 +50,12 @@ def _cfg_modele(modele: str) -> dict:
     )
     resolu["mobilier"] = (
         surcharge["mobilier"] if "mobilier" in surcharge else (defaut.get("mobilier") or {})
+    )
+    # Lignes d'inventaire mobilier des VRAIS modèles : cellule -> gabarit avec {MOTS CLÉS}
+    # (ex. "Tables : {TABLE}"). Chaque placeholder reçoit la somme des quantités des articles
+    # dont la désignation contient le mot-clé.
+    resolu["mobilier_lignes"] = (
+        surcharge.get("mobilier_lignes") or defaut.get("mobilier_lignes") or {}
     )
     return resolu
 
@@ -103,11 +110,38 @@ def remplir_etat(
     if cells_fonction and etat.fonction and etat.fonction in cells_fonction:
         a_ecrire[cells_fonction[etat.fonction]] = f"» {etat.fonction} «"
 
-    # --- Mobilier (somme par cellule) ---
-    # Seulement si le modèle a des CASES quantité mobilier. Les vrais modèles n'en ont pas :
-    # le mobilier y est matérialisé par le CHOIX du modèle « avec mobilier » (pas d'avertissement).
-    table_mobilier = cfg.get("mobilier") or {}
+    # --- Mobilier ---
     non_mappes: list[str] = []
+
+    # 1) Lignes d'inventaire des VRAIS modèles : « Tables : {TABLE} » -> « Tables : 4 ».
+    #    Un article compte pour chaque placeholder dont le mot-clé figure dans sa désignation ;
+    #    les articles qui ne trouvent aucune ligne sont signalés (à reporter à la main).
+    mob_lignes = cfg.get("mobilier_lignes") or {}
+    if mob_lignes and etat.mobilier:
+        consommes: set[int] = set()
+
+        def total_pour(mot: str) -> int:
+            cle = normaliser(mot)
+            total = 0
+            for i, item in enumerate(etat.mobilier):
+                if cle and cle in normaliser(item.designation):
+                    total += item.quantite
+                    consommes.add(i)
+            return total
+
+        for cellule, gabarit in mob_lignes.items():
+            texte = re.sub(
+                r"\{([^{}]+)\}",
+                lambda m: (str(t) if (t := total_pour(m.group(1))) else ""),
+                gabarit,
+            )
+            a_ecrire[cellule] = texte
+        non_mappes.extend(
+            item.designation for i, item in enumerate(etat.mobilier) if i not in consommes
+        )
+
+    # 2) Cases de quantité classiques (modèles qui en ont : cellule par mot-clé).
+    table_mobilier = cfg.get("mobilier") or {}
     if table_mobilier:
         sommes: dict[str, int] = {}
         for item in etat.mobilier:
