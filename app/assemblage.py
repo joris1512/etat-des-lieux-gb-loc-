@@ -49,6 +49,20 @@ def _a_kitchenette(mobilier: list[MobilierItem], texte: str = "") -> bool:
     return any(mot in corpus for mot in _MOTS_KITCHENETTE)
 
 
+def _kitchenette_seulement(mobilier: list[MobilierItem]) -> bool:
+    """True si le mobilier ne contient QUE de l'équipement kitchenette.
+
+    Le modèle assemblé « kit » n'a pas de lignes d'inventaire mobilier : on ne le choisit que
+    quand il n'y a rien d'autre à y écrire ; sinon l'assemblé classique reçoit toute la liste.
+    """
+    if not mobilier:
+        return False
+    return all(
+        any(mot in normaliser(item.designation) for mot in _MOTS_KITCHENETTE)
+        for item in mobilier
+    )
+
+
 def _variante_bungalow(art: ArticleDevis) -> str | None:
     """Choisit la variante de bungalow individuel : taille + mots-clés + mobilier + fonction.
 
@@ -174,10 +188,10 @@ def construire_plan(extraction: ExtractionDevis) -> PlanGeneration:
         mobilier = _fusionner_mobilier(articles)
         n = len(articles)
         if n >= 2:
-            # 1 état assemblé (porte le mobilier ; variante « kit » si équipement cuisine) ...
+            # 1 état assemblé (porte le mobilier ; « kit » seulement si 100 % kitchenette) ...
             plan.etats.append(
                 EtatDesLieux(
-                    modele=_modele_assemble(avec_kitchenette=_a_kitchenette(mobilier)),
+                    modele=_modele_assemble(avec_kitchenette=_kitchenette_seulement(mobilier)),
                     type_etat="assemble",
                     bloc=bloc,
                     fonction=fonction,

@@ -9,7 +9,6 @@ réserves ou signatures.
 
 from __future__ import annotations
 
-import re
 from functools import lru_cache
 from pathlib import Path
 
@@ -51,11 +50,10 @@ def _cfg_modele(modele: str) -> dict:
     resolu["mobilier"] = (
         surcharge["mobilier"] if "mobilier" in surcharge else (defaut.get("mobilier") or {})
     )
-    # Lignes d'inventaire mobilier des VRAIS modèles : cellule -> gabarit avec {MOTS CLÉS}
-    # (ex. "Tables : {TABLE}"). Chaque placeholder reçoit la somme des quantités des articles
-    # dont la désignation contient le mot-clé.
-    resolu["mobilier_lignes"] = (
-        surcharge.get("mobilier_lignes") or defaut.get("mobilier_lignes") or {}
+    # Zone d'inventaire mobilier des VRAIS modèles : liste de cellules qui reçoivent la liste
+    # COMPLÈTE du devis, telle quelle (« MICRO ONDES : 2 ») — rien n'est filtré ni perdu.
+    resolu["mobilier_zone"] = (
+        surcharge.get("mobilier_zone") or defaut.get("mobilier_zone") or []
     )
     return resolu
 
@@ -113,32 +111,19 @@ def remplir_etat(
     # --- Mobilier ---
     non_mappes: list[str] = []
 
-    # 1) Lignes d'inventaire des VRAIS modèles : « Tables : {TABLE} » -> « Tables : 4 ».
-    #    Un article compte pour chaque placeholder dont le mot-clé figure dans sa désignation ;
-    #    les articles qui ne trouvent aucune ligne sont signalés (à reporter à la main).
-    mob_lignes = cfg.get("mobilier_lignes") or {}
-    if mob_lignes and etat.mobilier:
-        consommes: set[int] = set()
-
-        def total_pour(mot: str) -> int:
-            cle = normaliser(mot)
-            total = 0
-            for i, item in enumerate(etat.mobilier):
-                if cle and cle in normaliser(item.designation):
-                    total += item.quantite
-                    consommes.add(i)
-            return total
-
-        for cellule, gabarit in mob_lignes.items():
-            texte = re.sub(
-                r"\{([^{}]+)\}",
-                lambda m: (str(t) if (t := total_pour(m.group(1))) else ""),
-                gabarit,
-            )
-            a_ecrire[cellule] = texte
-        non_mappes.extend(
-            item.designation for i, item in enumerate(etat.mobilier) if i not in consommes
-        )
+    # 1) Zone d'inventaire des VRAIS modèles : la liste COMPLÈTE du devis est reportée telle
+    #    quelle (« TABLE MODULAIRE RECT. 160X80 : 4 »), une ligne par cellule disponible ;
+    #    s'il y a plus d'articles que de lignes, le reste est regroupé sur la dernière.
+    zone = cfg.get("mobilier_zone") or []
+    if zone and etat.mobilier:
+        lignes = [f"{item.designation} : {item.quantite}" for item in etat.mobilier]
+        if len(zone) == 1:
+            a_ecrire[zone[0]] = "\n".join(lignes)
+        else:
+            if len(lignes) > len(zone):
+                lignes = lignes[: len(zone) - 1] + [" · ".join(lignes[len(zone) - 1 :])]
+            for cellule, texte in zip(zone, lignes):
+                a_ecrire[cellule] = texte
 
     # 2) Cases de quantité classiques (modèles qui en ont : cellule par mot-clé).
     table_mobilier = cfg.get("mobilier") or {}
