@@ -66,6 +66,15 @@ CREATE TABLE IF NOT EXISTS fichiers (
   generation_id INTEGER NOT NULL REFERENCES generations(id) ON DELETE CASCADE,
   nom TEXT NOT NULL, type_etat TEXT, bloc TEXT
 );
+CREATE TABLE IF NOT EXISTS utilisateurs (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  identifiant TEXT NOT NULL UNIQUE COLLATE NOCASE,
+  nom_affiche TEXT NOT NULL,
+  hash TEXT NOT NULL,
+  role TEXT NOT NULL DEFAULT 'utilisateur',
+  actif INTEGER NOT NULL DEFAULT 1,
+  cree_le TEXT NOT NULL
+);
 CREATE TABLE IF NOT EXISTS journal (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   horodatage TEXT NOT NULL, horodatage_aff TEXT NOT NULL,
@@ -114,6 +123,76 @@ def _ensure() -> None:
 
 def _vide(v) -> bool:
     return v is None or str(v).strip() == ""
+
+
+# --------------------------------------------------------------------------- #
+# Comptes utilisateurs (multi-postes : authentification nominative + imputabilité)
+# --------------------------------------------------------------------------- #
+def lister_utilisateurs() -> list[dict]:
+    """Comptes (sans les empreintes de mot de passe)."""
+    _ensure()
+    with _conn() as cx:
+        rows = cx.execute(
+            "SELECT id, identifiant, nom_affiche, role, actif, cree_le FROM utilisateurs "
+            "ORDER BY identifiant"
+        ).fetchall()
+    return [dict(r) for r in rows]
+
+
+def lire_utilisateur(identifiant: str) -> dict | None:
+    """Compte actif correspondant à l'identifiant (avec hash, pour vérification)."""
+    _ensure()
+    with _conn() as cx:
+        r = cx.execute(
+            "SELECT * FROM utilisateurs WHERE identifiant = ? COLLATE NOCASE AND actif = 1",
+            (identifiant,),
+        ).fetchone()
+    return dict(r) if r else None
+
+
+def utilisateurs_actifs_existent() -> bool:
+    _ensure()
+    with _conn() as cx:
+        return cx.execute("SELECT 1 FROM utilisateurs WHERE actif=1 LIMIT 1").fetchone() is not None
+
+
+def creer_utilisateur(identifiant: str, nom_affiche: str, hash_: str, role: str) -> int:
+    """Crée un compte. Lève ValueError si l'identifiant existe déjà."""
+    _ensure()
+    if role not in ("admin", "utilisateur"):
+        raise ValueError("Rôle invalide (admin ou utilisateur).")
+    iso = datetime.now().isoformat(timespec="seconds")
+    with _conn() as cx:
+        ex = cx.execute(
+            "SELECT 1 FROM utilisateurs WHERE identifiant = ? COLLATE NOCASE", (identifiant,)
+        ).fetchone()
+        if ex:
+            raise ValueError("Cet identifiant existe déjà.")
+        cur = cx.execute(
+            "INSERT INTO utilisateurs (identifiant, nom_affiche, hash, role, actif, cree_le) "
+            "VALUES (?,?,?,?,1,?)",
+            (identifiant, nom_affiche, hash_, role, iso),
+        )
+        return int(cur.lastrowid)
+
+
+def modifier_utilisateur(uid: int, *, hash_: str | None = None, actif: bool | None = None) -> None:
+    """Change le mot de passe et/ou l'état actif. Protège le dernier admin actif."""
+    _ensure()
+    with _conn() as cx:
+        u = cx.execute("SELECT * FROM utilisateurs WHERE id=?", (uid,)).fetchone()
+        if u is None:
+            raise ValueError("Compte introuvable.")
+        if actif is False and u["role"] == "admin":
+            autres = cx.execute(
+                "SELECT COUNT(*) n FROM utilisateurs WHERE role='admin' AND actif=1 AND id<>?", (uid,)
+            ).fetchone()["n"]
+            if autres == 0:
+                raise ValueError("Impossible de désactiver le dernier administrateur actif.")
+        if hash_ is not None:
+            cx.execute("UPDATE utilisateurs SET hash=? WHERE id=?", (hash_, uid))
+        if actif is not None:
+            cx.execute("UPDATE utilisateurs SET actif=? WHERE id=?", (1 if actif else 0, uid))
 
 
 def supprimer_client(client_id: int) -> list[str] | None:

@@ -55,12 +55,33 @@ def verifier_hash(mot_de_passe: str, stocke: str) -> bool:
 
 
 def auth_configuree() -> bool:
-    """L'authentification est-elle activée (clair ou haché) ?"""
+    """Auth activée si un mot de passe est défini dans .env OU si des comptes existent en base."""
     r = get_reglages()
-    return bool(r.mot_de_passe or r.mot_de_passe_hash)
+    if r.mot_de_passe or r.mot_de_passe_hash:
+        return True
+    from app import db  # import tardif (db n'importe jamais securite)
+
+    try:
+        return db.utilisateurs_actifs_existent()
+    except Exception:  # noqa: BLE001 — une base indisponible ne doit pas ouvrir l'accès… ni le bloquer au boot
+        return False
 
 
-def _identifiants_valides(utilisateur: str, mot_de_passe: str) -> bool:
+def _authentifier(utilisateur: str, mot_de_passe: str) -> tuple[str, str] | None:
+    """Renvoie (identifiant, rôle) si les identifiants sont valides, sinon None.
+
+    Les comptes nominatifs (base) priment ; le compte unique du .env reste accepté
+    (compatibilité + secours), avec le rôle admin.
+    """
+    from app import db
+
+    try:
+        compte = db.lire_utilisateur(utilisateur)
+    except Exception:  # noqa: BLE001
+        compte = None
+    if compte and verifier_hash(mot_de_passe, compte["hash"]):
+        return compte["identifiant"], compte["role"]
+
     r = get_reglages()
     user_ok = hmac.compare_digest(utilisateur.encode("utf-8"), r.utilisateur.encode("utf-8"))
     if r.mot_de_passe_hash:
@@ -69,7 +90,9 @@ def _identifiants_valides(utilisateur: str, mot_de_passe: str) -> bool:
         pwd_ok = hmac.compare_digest(mot_de_passe.encode("utf-8"), r.mot_de_passe.encode("utf-8"))
     else:
         pwd_ok = False
-    return user_ok and pwd_ok
+    if user_ok and pwd_ok:
+        return r.utilisateur, "admin"
+    return None
 
 
 def _bloque(ip: str) -> bool:
@@ -87,11 +110,27 @@ def _reset(ip: str) -> None:
     _echecs.pop(ip, None)
 
 
+def utilisateur_courant(request: Request) -> str:
+    """Identifiant authentifié porté par la requête (« poste-local » quand l'auth est désactivée)."""
+    return getattr(request.state, "utilisateur", "poste-local")
+
+
+def exiger_admin(request: Request) -> None:
+    """Réserve une route aux administrateurs (tout est admin quand l'auth est désactivée)."""
+    if getattr(request.state, "role", "admin") != "admin":
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Action réservée aux administrateurs.",
+        )
+
+
 def exiger_auth(
     request: Request, credentials: HTTPBasicCredentials | None = Depends(_basic)
 ) -> None:
     """Dépendance globale : laisse passer si l'auth est désactivée, sinon vérifie + anti-brute-force."""
     if not auth_configuree():
+        request.state.utilisateur = "poste-local"
+        request.state.role = "admin"
         return
 
     ip = request.client.host if request.client else "inconnu"
@@ -110,7 +149,9 @@ def exiger_auth(
     )
     if credentials is None:
         raise non_authentifie
-    if _identifiants_valides(credentials.username, credentials.password):
+    resultat = _authentifier(credentials.username, credentials.password)
+    if resultat:
+        request.state.utilisateur, request.state.role = resultat
         _reset(ip)
         return
 

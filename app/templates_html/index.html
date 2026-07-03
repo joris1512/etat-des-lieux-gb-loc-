@@ -225,6 +225,8 @@
         <button class="nav-item" data-view="historique"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>Historique</button>
         <button class="nav-item" data-view="clients"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75"/></svg>Clients</button>
         <button class="nav-item" data-view="statistiques"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3v18h18"/><path d="M18 9l-5 5-3-3-4 4"/></svg>Statistiques</button>
+        <div class="nav-lbl">Administration</div>
+        <button class="nav-item" data-view="utilisateurs"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="4"/><path d="M4 21v-1a6 6 0 0 1 6-6h4a6 6 0 0 1 6 6v1"/></svg>Utilisateurs</button>
       </nav>
       <div class="side-foot"><div class="r" id="auth-row"><span class="dot"></span><span>En ligne</span></div><div class="r" style="color:var(--faint)">GB Location · Cockpit v2</div></div>
     </aside>
@@ -340,6 +342,22 @@
           <div class="card"><div class="card-h">Répartition par type</div><div id="chart-types"></div></div>
         </div>
       </section>
+
+      <!-- UTILISATEURS -->
+      <section class="view" id="view-utilisateurs">
+        <div class="page-head" style="margin-bottom:22px"><div class="eyebrow">// ADMINISTRATION</div><h1 class="title">Utilisateurs</h1><p class="subtitle">Comptes nominatifs : chaque action sensible est tracée au nom de son auteur. Dès qu'un compte existe, la connexion devient obligatoire.</p></div>
+        <div class="card" style="margin-bottom:18px">
+          <div class="card-h">Ajouter un compte</div>
+          <div class="fgrid" style="align-items:end">
+            <div class="field"><label>Identifiant</label><input id="u-id" placeholder="ex. j.dupont" autocomplete="off"></div>
+            <div class="field"><label>Nom affiché</label><input id="u-nom" placeholder="ex. Jean Dupont"></div>
+            <div class="field"><label>Mot de passe (8 car. min)</label><input id="u-mdp" type="password" autocomplete="new-password"></div>
+            <div class="field" style="max-width:160px"><label>Rôle</label><select id="u-role" style="height:38px;background:var(--surface);color:var(--ink);border:1px solid var(--bd2);border-radius:var(--rc);padding:0 10px"><option value="utilisateur">utilisateur</option><option value="admin">admin</option></select></div>
+            <button type="button" class="btn btn-primary" id="u-add">Créer le compte</button>
+          </div>
+        </div>
+        <div class="card"><div class="card-h">Comptes</div><div id="u-liste"><div class="empty"><p>Chargement…</p></div></div></div>
+      </section>
     </main>
   </div>
   <div class="toasts" id="toasts"></div>
@@ -374,7 +392,7 @@
       document.querySelectorAll('.nav-item[data-view]').forEach(x=>x.classList.toggle('active',x.dataset.view===v));
       document.querySelectorAll('.view').forEach(s=>s.classList.remove('active'));
       $('#view-'+v).classList.add('active');
-      ({dashboard:chargerDashboard,modeles:chargerModeles,historique:()=>chargerHistorique(),clients:chargerClients,statistiques:chargerStats}[v]||(()=>{}))();
+      ({dashboard:chargerDashboard,modeles:chargerModeles,historique:()=>chargerHistorique(),clients:chargerClients,statistiques:chargerStats,utilisateurs:chargerUtilisateurs}[v]||(()=>{}))();
     }
     document.querySelectorAll('.nav-item[data-view]').forEach(b=>b.addEventListener('click',()=>goto(b.dataset.view)));
     document.querySelectorAll('[data-goto]').forEach(b=>b.addEventListener('click',()=>goto(b.dataset.goto)));
@@ -603,6 +621,38 @@
       try{const r=await fetch('/correspondances',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({pattern,modele,est_bungalow:bung,categorie:bung?'bungalow':'sanitaire'})});const d=await r.json();if(!r.ok)throw new Error(d.detail||'Erreur');toast('Règle enregistrée.','ok');$('#regle-pattern').value='';$('#regle-bung').checked=false;chargerRegles();}catch(e){toast(e.message,'bad');}}
     async function supprimerRegle(pattern){if(!confirm(`Supprimer la règle « ${pattern} » ?`))return;try{const r=await fetch('/correspondances?pattern='+encodeURIComponent(pattern),{method:'DELETE'});if(!r.ok){const d=await r.json();throw new Error(d.detail||'Erreur');}toast('Règle supprimée.','ok');chargerRegles();}catch(e){toast(e.message,'bad');}}
     $('#btn-regle-add').addEventListener('click',enregistrerRegle);
+
+    /* UTILISATEURS (administration) */
+    function rendreUtilisateurs(liste){
+      const box=$('#u-liste');
+      if(!liste.length){box.innerHTML='<div class="empty"><p>Aucun compte : l\'application fonctionne en accès libre sur ce poste. Créez un compte « admin » pour activer la connexion.</p></div>';return;}
+      box.innerHTML=liste.map(u=>`<div style="display:flex;align-items:center;gap:12px;padding:10px 0;border-bottom:1px solid var(--bd)">
+        <div style="flex:1"><div style="font-weight:700">${esc(u.nom_affiche)} <span class="mono" style="color:var(--faint);font-weight:400">· ${esc(u.identifiant)}</span></div>
+        <div class="hint">${u.role==='admin'?'administrateur':'utilisateur'} · créé le ${esc((u.cree_le||'').slice(0,10))}</div></div>
+        ${u.actif?'<span class="state present">actif</span>':'<span class="state missing">désactivé</span>'}
+        <button class="btn btn-ghost btn-sm" data-umdp="${u.id}">Mot de passe</button>
+        <button class="btn ${u.actif?'btn-danger':'btn-ghost'} btn-sm" data-uactif="${u.id}" data-etat="${u.actif?1:0}">${u.actif?'Désactiver':'Réactiver'}</button>
+      </div>`).join('');
+      box.querySelectorAll('[data-umdp]').forEach(b=>b.addEventListener('click',async()=>{
+        const mdp=prompt('Nouveau mot de passe (8 caractères minimum) :');if(!mdp)return;
+        try{const r=await fetch('/utilisateurs/'+b.dataset.umdp+'/mot-de-passe',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({mot_de_passe:mdp})});const d=await r.json();if(!r.ok)throw new Error(d.detail||'Erreur');toast('Mot de passe modifié.','ok');}catch(e){toast(e.message,'bad');}
+      }));
+      box.querySelectorAll('[data-uactif]').forEach(b=>b.addEventListener('click',async()=>{
+        const versActif=b.dataset.etat!=='1';
+        try{const r=await fetch('/utilisateurs/'+b.dataset.uactif+'/actif',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({actif:versActif})});const d=await r.json();if(!r.ok)throw new Error(d.detail||'Erreur');rendreUtilisateurs(d.utilisateurs);toast(versActif?'Compte réactivé.':'Compte désactivé.','ok');}catch(e){toast(e.message,'bad');}
+      }));
+    }
+    async function chargerUtilisateurs(){
+      const box=$('#u-liste');
+      try{const r=await fetch('/utilisateurs');const d=await r.json();if(!r.ok)throw new Error(d.detail||'Accès refusé');rendreUtilisateurs(d.utilisateurs);}
+      catch(e){box.innerHTML=`<div class="empty"><p>${esc(e.message)}</p></div>`;}
+    }
+    $('#u-add').addEventListener('click',async()=>{
+      const corps={identifiant:$('#u-id').value.trim(),nom_affiche:$('#u-nom').value.trim(),mot_de_passe:$('#u-mdp').value,role:$('#u-role').value};
+      try{const r=await fetch('/utilisateurs',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(corps)});const d=await r.json();if(!r.ok)throw new Error(d.detail||'Erreur');
+        $('#u-id').value=$('#u-nom').value=$('#u-mdp').value='';rendreUtilisateurs(d.utilisateurs);toast('Compte créé. La connexion est désormais requise pour tous.','ok');}
+      catch(e){toast(e.message,'bad');}
+    });
 
     /* Init */
     (async()=>{try{const s=await(await fetch('/etat')).json();const v=s.version?` · v${esc(s.version)}`:'';$('#auth-row').innerHTML=s.auth?`<span class="dot"></span><span>Connecté · ${esc(s.utilisateur)}${v}</span>`:`<span class="dot"></span><span>En ligne${v}</span>`;}catch(_){}chargerDashboard();chargerModeles();})();

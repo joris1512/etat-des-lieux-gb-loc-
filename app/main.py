@@ -28,7 +28,13 @@ from app.generation import analyser, generer, generer_depuis_extraction
 from app.models import ExtractionDevis
 from app.modeles import enregistrer_modele, lister_modeles, modeles_presents, supprimer_modele
 from app.purge import purger_anciennes_sorties
-from app.securite import auth_configuree, exiger_auth
+from app.securite import (
+    auth_configuree,
+    exiger_admin,
+    exiger_auth,
+    hacher,
+    utilisateur_courant,
+)
 
 logger = logging.getLogger("uvicorn.error")
 
@@ -212,10 +218,67 @@ def generer_revise_endpoint(extraction: ExtractionDevis):
 
 
 @app.get("/etat")
-def etat() -> dict:
-    """État léger pour l'UI : authentification active et identifiant courant."""
-    reglages = get_reglages()
-    return {"auth": auth_configuree(), "utilisateur": reglages.utilisateur, "version": VERSION}
+def etat(request: Request) -> dict:
+    """État léger pour l'UI : authentification, identité connectée, rôle, version."""
+    return {
+        "auth": auth_configuree(),
+        "utilisateur": utilisateur_courant(request),
+        "role": getattr(request.state, "role", "admin"),
+        "version": VERSION,
+    }
+
+
+# --------------------------------------------------------------------------- #
+# Comptes utilisateurs (multi-postes) — gestion réservée aux administrateurs
+# --------------------------------------------------------------------------- #
+@app.get("/utilisateurs")
+def utilisateurs_lister(request: Request) -> dict:
+    exiger_admin(request)
+    return {"utilisateurs": db.lister_utilisateurs()}
+
+
+@app.post("/utilisateurs")
+async def utilisateurs_creer(request: Request, corps: dict) -> dict:
+    exiger_admin(request)
+    identifiant = (corps.get("identifiant") or "").strip()
+    nom = (corps.get("nom_affiche") or "").strip() or identifiant
+    mdp = corps.get("mot_de_passe") or ""
+    role = (corps.get("role") or "utilisateur").strip()
+    if not identifiant or len(mdp) < 8:
+        raise HTTPException(
+            status_code=400, detail="Identifiant requis et mot de passe d'au moins 8 caractères."
+        )
+    try:
+        db.creer_utilisateur(identifiant, nom, hacher(mdp), role)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    logger.info("AUDIT compte créé : %s (%s) par %s", identifiant, role, utilisateur_courant(request))
+    return {"utilisateurs": db.lister_utilisateurs()}
+
+
+@app.post("/utilisateurs/{uid}/mot-de-passe")
+async def utilisateurs_mdp(uid: int, request: Request, corps: dict) -> dict:
+    exiger_admin(request)
+    mdp = corps.get("mot_de_passe") or ""
+    if len(mdp) < 8:
+        raise HTTPException(status_code=400, detail="Mot de passe d'au moins 8 caractères.")
+    try:
+        db.modifier_utilisateur(uid, hash_=hacher(mdp))
+    except ValueError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    logger.info("AUDIT mot de passe réinitialisé pour le compte n° %s par %s", uid, utilisateur_courant(request))
+    return {"ok": True}
+
+
+@app.post("/utilisateurs/{uid}/actif")
+async def utilisateurs_actif(uid: int, request: Request, corps: dict) -> dict:
+    exiger_admin(request)
+    try:
+        db.modifier_utilisateur(uid, actif=bool(corps.get("actif")))
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    logger.info("AUDIT compte n° %s actif=%s par %s", uid, bool(corps.get("actif")), utilisateur_courant(request))
+    return {"utilisateurs": db.lister_utilisateurs()}
 
 
 @app.get("/stats")
@@ -274,7 +337,7 @@ def client_detail_endpoint(client_id: int) -> dict:
 
 
 @app.delete("/clients/{client_id}")
-def client_supprimer_endpoint(client_id: int) -> dict:
+def client_supprimer_endpoint(client_id: int, request: Request) -> dict:
     """Efface un client et toutes ses données (RGPD — droit à l'effacement), fichiers compris."""
     jobs = db.supprimer_client(client_id)
     if jobs is None:
@@ -288,7 +351,10 @@ def client_supprimer_endpoint(client_id: int) -> dict:
             shutil.rmtree(cible, ignore_errors=True)
             purges += 1
     # Journal d'audit volontairement anonyme (pas de donnée nominative dans les logs).
-    logger.info("AUDIT effacement RGPD : fiche client n° %s (%s dossier(s) purgé(s)).", client_id, purges)
+    logger.info(
+        "AUDIT effacement RGPD : fiche client n° %s (%s dossier(s) purgé(s)) par %s.",
+        client_id, purges, utilisateur_courant(request),
+    )
     return {"supprime": True, "dossiers_purges": purges}
 
 
@@ -320,7 +386,7 @@ def correspondances_lister() -> dict:
 
 
 @app.post("/correspondances")
-async def correspondances_enregistrer(regle: dict) -> dict:
+async def correspondances_enregistrer(regle: dict, request: Request) -> dict:
     """Ajoute une règle ou remplace celle du même mot déclencheur."""
     pattern = (regle.get("pattern") or "").strip()
     modele = (regle.get("modele") or "").strip()
@@ -332,15 +398,15 @@ async def correspondances_enregistrer(regle: dict) -> dict:
         )
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
-    logger.info("AUDIT règle enregistrée : %s -> %s", pattern, modele)
+    logger.info("AUDIT règle enregistrée : %s -> %s par %s", pattern, modele, utilisateur_courant(request))
     return {"regles": lister_regles(), "modeles": modeles_presents()}
 
 
 @app.delete("/correspondances")
-def correspondances_supprimer(pattern: str) -> dict:
+def correspondances_supprimer(pattern: str, request: Request) -> dict:
     """Supprime la règle du mot déclencheur donné."""
     supprimer_regle(pattern)
-    logger.info("AUDIT règle supprimée : %s", pattern)
+    logger.info("AUDIT règle supprimée : %s par %s", pattern, utilisateur_courant(request))
     return {"regles": lister_regles(), "modeles": modeles_presents()}
 
 
@@ -359,13 +425,13 @@ async def modeles_televerser(fichiers: list[UploadFile] = File(...)) -> dict:
 
 
 @app.delete("/modeles/{nom}")
-def modeles_supprimer(nom: str) -> dict:
+def modeles_supprimer(nom: str, request: Request) -> dict:
     """Supprime un modèle de la bibliothèque."""
     try:
         supprimer_modele(nom)
     except Exception as exc:  # noqa: BLE001
         raise HTTPException(status_code=400, detail=str(exc)) from exc
-    logger.info("AUDIT modèle supprimé : %s", nom)
+    logger.info("AUDIT modèle supprimé : %s par %s", nom, utilisateur_courant(request))
     return lister_modeles()
 
 
