@@ -229,6 +229,52 @@ def etat(request: Request) -> dict:
 
 
 # --------------------------------------------------------------------------- #
+# Paramètres (marque blanche : nom de société + logo) — modification admin
+# --------------------------------------------------------------------------- #
+_LOGO_CLIENT = "logo_client.png"
+
+
+@app.get("/parametres")
+def parametres_lire() -> dict:
+    """Personnalisation affichée par l'UI (nom de société, logo)."""
+    logo = f"/static/{_LOGO_CLIENT}" if (STATIC_DIR / _LOGO_CLIENT).exists() else "/static/logo.png"
+    return {"societe": db.lire_parametre("societe", "") or "", "logo": logo}
+
+
+@app.post("/parametres")
+async def parametres_ecrire(request: Request, corps: dict) -> dict:
+    exiger_admin(request)
+    societe = (corps.get("societe") or "").strip()[:80]
+    db.ecrire_parametre("societe", societe)
+    logger.info("AUDIT paramètres : société = « %s » par %s", societe, utilisateur_courant(request))
+    return parametres_lire()
+
+
+@app.post("/parametres/logo")
+async def parametres_logo(request: Request, fichier: UploadFile = File(...)) -> dict:
+    exiger_admin(request)
+    contenu = await fichier.read()
+    if not contenu or len(contenu) > 2 * 1024 * 1024:
+        raise HTTPException(status_code=400, detail="Image requise (2 Mo max).")
+    # Signatures de fichier : PNG ou JPEG uniquement (pas de SVG ni de HTML déguisé).
+    est_png = contenu.startswith(b"\x89PNG\r\n\x1a\n")
+    est_jpeg = contenu.startswith(b"\xff\xd8\xff")
+    if not (est_png or est_jpeg):
+        raise HTTPException(status_code=400, detail="Format accepté : PNG ou JPEG.")
+    (STATIC_DIR / _LOGO_CLIENT).write_bytes(contenu)
+    logger.info("AUDIT paramètres : logo remplacé par %s", utilisateur_courant(request))
+    return parametres_lire()
+
+
+@app.delete("/parametres/logo")
+def parametres_logo_defaut(request: Request) -> dict:
+    exiger_admin(request)
+    (STATIC_DIR / _LOGO_CLIENT).unlink(missing_ok=True)
+    logger.info("AUDIT paramètres : retour au logo par défaut par %s", utilisateur_courant(request))
+    return parametres_lire()
+
+
+# --------------------------------------------------------------------------- #
 # Comptes utilisateurs (multi-postes) — gestion réservée aux administrateurs
 # --------------------------------------------------------------------------- #
 @app.get("/utilisateurs")

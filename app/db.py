@@ -66,6 +66,10 @@ CREATE TABLE IF NOT EXISTS fichiers (
   generation_id INTEGER NOT NULL REFERENCES generations(id) ON DELETE CASCADE,
   nom TEXT NOT NULL, type_etat TEXT, bloc TEXT
 );
+CREATE TABLE IF NOT EXISTS parametres (
+  cle TEXT PRIMARY KEY,
+  valeur TEXT
+);
 CREATE TABLE IF NOT EXISTS utilisateurs (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   identifiant TEXT NOT NULL UNIQUE COLLATE NOCASE,
@@ -123,6 +127,24 @@ def _ensure() -> None:
 
 def _vide(v) -> bool:
     return v is None or str(v).strip() == ""
+
+
+def lire_parametre(cle: str, defaut: str | None = None) -> str | None:
+    """Paramètre d'application (marque blanche, préférences…)."""
+    _ensure()
+    with _conn() as cx:
+        r = cx.execute("SELECT valeur FROM parametres WHERE cle=?", (cle,)).fetchone()
+    return r["valeur"] if r else defaut
+
+
+def ecrire_parametre(cle: str, valeur: str) -> None:
+    _ensure()
+    with _conn() as cx:
+        cx.execute(
+            "INSERT INTO parametres (cle, valeur) VALUES (?,?) "
+            "ON CONFLICT(cle) DO UPDATE SET valeur=excluded.valeur",
+            (cle, valeur),
+        )
 
 
 # --------------------------------------------------------------------------- #

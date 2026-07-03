@@ -215,7 +215,7 @@
 <body>
   <div class="app">
     <aside class="sidebar">
-      <div class="brand"><div class="logo-chip"><img src="/static/logo.png" alt="GB Location" /></div></div>
+      <div class="brand"><div class="logo-chip"><img id="brand-logo" src="/static/logo.png" alt="Logo" /></div><div id="brand-nom" style="font-weight:800;letter-spacing:.02em;line-height:1.15"></div></div>
       <nav class="nav">
         <div class="nav-lbl">Pilotage</div>
         <button class="nav-item active" data-view="dashboard"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="9"/><rect x="14" y="3" width="7" height="5"/><rect x="14" y="12" width="7" height="9"/><rect x="3" y="16" width="7" height="5"/></svg>Tableau de bord</button>
@@ -225,8 +225,10 @@
         <button class="nav-item" data-view="historique"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>Historique</button>
         <button class="nav-item" data-view="clients"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75"/></svg>Clients</button>
         <button class="nav-item" data-view="statistiques"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3v18h18"/><path d="M18 9l-5 5-3-3-4 4"/></svg>Statistiques</button>
+        <div id="nav-admin" style="display:contents">
         <div class="nav-lbl">Administration</div>
-        <button class="nav-item" data-view="utilisateurs"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="4"/><path d="M4 21v-1a6 6 0 0 1 6-6h4a6 6 0 0 1 6 6v1"/></svg>Utilisateurs</button>
+        <button class="nav-item" data-view="utilisateurs"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="4"/><path d="M4 21v-1a6 6 0 0 1 6-6h4a6 6 0 0 1 6 6v1"/></svg>Administration</button>
+        </div>
       </nav>
       <div class="side-foot"><div class="r" id="auth-row"><span class="dot"></span><span>En ligne</span></div><div class="r" style="color:var(--faint)">GB Location · Cockpit v2</div></div>
     </aside>
@@ -345,7 +347,16 @@
 
       <!-- UTILISATEURS -->
       <section class="view" id="view-utilisateurs">
-        <div class="page-head" style="margin-bottom:22px"><div class="eyebrow">// ADMINISTRATION</div><h1 class="title">Utilisateurs</h1><p class="subtitle">Comptes nominatifs : chaque action sensible est tracée au nom de son auteur. Dès qu'un compte existe, la connexion devient obligatoire.</p></div>
+        <div class="page-head" style="margin-bottom:22px"><div class="eyebrow">// ADMINISTRATION</div><h1 class="title">Administration</h1><p class="subtitle">Société, marque et comptes utilisateurs — réservé aux administrateurs.</p></div>
+        <div class="card" style="margin-bottom:18px">
+          <div class="card-h">Société (marque blanche)</div>
+          <div class="fgrid" style="align-items:end">
+            <div class="field"><label>Nom affiché dans l'application</label><input id="soc-nom" placeholder="ex. GB Location"></div>
+            <button type="button" class="btn btn-primary" id="soc-save">Enregistrer</button>
+            <div class="field" style="max-width:260px"><label>Logo (PNG/JPEG, 2 Mo max)</label><input type="file" id="soc-logo" accept="image/png,image/jpeg"></div>
+            <button type="button" class="btn btn-ghost" id="soc-logo-defaut">Logo par défaut</button>
+          </div>
+        </div>
         <div class="card" style="margin-bottom:18px">
           <div class="card-h">Ajouter un compte</div>
           <div class="fgrid" style="align-items:end">
@@ -622,6 +633,12 @@
     async function supprimerRegle(pattern){if(!confirm(`Supprimer la règle « ${pattern} » ?`))return;try{const r=await fetch('/correspondances?pattern='+encodeURIComponent(pattern),{method:'DELETE'});if(!r.ok){const d=await r.json();throw new Error(d.detail||'Erreur');}toast('Règle supprimée.','ok');chargerRegles();}catch(e){toast(e.message,'bad');}}
     $('#btn-regle-add').addEventListener('click',enregistrerRegle);
 
+    /* MARQUE BLANCHE (nom de société + logo) */
+    async function chargerMarque(){try{const p=await(await fetch('/parametres')).json();$('#brand-logo').src=p.logo+'?v='+Date.now();$('#brand-nom').textContent=p.societe||'';const n=$('#soc-nom');if(n&&!n.value)n.value=p.societe||'';}catch(_){}}
+    $('#soc-save').addEventListener('click',async()=>{try{const r=await fetch('/parametres',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({societe:$('#soc-nom').value})});const d=await r.json();if(!r.ok)throw new Error(d.detail||'Erreur');toast('Nom de société enregistré.','ok');chargerMarque();}catch(e){toast(e.message,'bad');}});
+    $('#soc-logo').addEventListener('change',async()=>{const f=$('#soc-logo').files[0];if(!f)return;const fd=new FormData();fd.append('fichier',f);try{const r=await fetch('/parametres/logo',{method:'POST',body:fd});const d=await r.json();if(!r.ok)throw new Error(d.detail||'Erreur');toast('Logo remplacé.','ok');$('#soc-logo').value='';chargerMarque();}catch(e){toast(e.message,'bad');}});
+    $('#soc-logo-defaut').addEventListener('click',async()=>{try{const r=await fetch('/parametres/logo',{method:'DELETE'});if(!r.ok){const d=await r.json();throw new Error(d.detail||'Erreur');}toast('Logo par défaut restauré.','ok');chargerMarque();}catch(e){toast(e.message,'bad');}});
+
     /* UTILISATEURS (administration) */
     function rendreUtilisateurs(liste){
       const box=$('#u-liste');
@@ -655,7 +672,7 @@
     });
 
     /* Init */
-    (async()=>{try{const s=await(await fetch('/etat')).json();const v=s.version?` · v${esc(s.version)}`:'';$('#auth-row').innerHTML=s.auth?`<span class="dot"></span><span>Connecté · ${esc(s.utilisateur)}${v}</span>`:`<span class="dot"></span><span>En ligne${v}</span>`;}catch(_){}chargerDashboard();chargerModeles();})();
+    (async()=>{try{const s=await(await fetch('/etat')).json();const v=s.version?` · v${esc(s.version)}`:'';$('#auth-row').innerHTML=s.auth?`<span class="dot"></span><span>Connecté · ${esc(s.utilisateur)}${v}</span>`:`<span class="dot"></span><span>En ligne${v}</span>`;if(s.role&&s.role!=='admin')$('#nav-admin').style.display='none';}catch(_){}chargerMarque();chargerDashboard();chargerModeles();})();
   </script>
 </body>
 </html>

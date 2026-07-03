@@ -24,6 +24,7 @@ if exist "%SAUVE%" rd /s /q "%SAUVE%"
 md "%SAUVE%"
 if exist "%DST%\_internal\runtime" xcopy /e /i /q "%DST%\_internal\runtime" "%SAUVE%\runtime" >nul
 if exist "%DST%\_internal\.env" copy /y "%DST%\_internal\.env" "%SAUVE%\.env" >nul
+if exist "%DST%\_internal\app\static\logo_client.png" copy /y "%DST%\_internal\app\static\logo_client.png" "%SAUVE%\logo_client.png" >nul
 
 echo Installation de la nouvelle version...
 if exist "%DST%" rd /s /q "%DST%"
@@ -32,6 +33,7 @@ xcopy /e /i /q "%SRC%" "%DST%" >nul
 echo Restauration des donnees et de la cle...
 if exist "%SAUVE%\runtime" xcopy /e /i /q "%SAUVE%\runtime" "%DST%\_internal\runtime" >nul
 if exist "%SAUVE%\.env" copy /y "%SAUVE%\.env" "%DST%\_internal\.env" >nul
+if exist "%SAUVE%\logo_client.png" copy /y "%SAUVE%\logo_client.png" "%DST%\_internal\app\static\logo_client.png" >nul
 rd /s /q "%SAUVE%" >nul 2>&1
 
 echo Raccourci Bureau + demarrage automatique...
