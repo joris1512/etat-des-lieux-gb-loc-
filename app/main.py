@@ -3,12 +3,13 @@
 from __future__ import annotations
 
 import logging
+import os
 import shutil
 from collections import Counter
 from contextlib import asynccontextmanager
 from pathlib import Path
 
-from fastapi import Depends, FastAPI, File, Form, HTTPException, UploadFile
+from fastapi import Depends, FastAPI, File, Form, HTTPException, Request, UploadFile
 from fastapi.responses import FileResponse, HTMLResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 
@@ -401,3 +402,34 @@ def telecharger(job_id: str, nom: str) -> FileResponse:
         else "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
     )
     return FileResponse(cible, filename=nom, media_type=media)
+
+
+def _exiger_poste_local(request: Request) -> None:
+    """N'autorise l'ouverture directe que depuis CE poste (sinon Excel s'ouvrirait sur le serveur)."""
+    hote = (request.client.host if request.client else "") or ""
+    if hote not in ("127.0.0.1", "::1", "localhost"):
+        raise HTTPException(
+            status_code=403,
+            detail="Ouverture directe disponible uniquement sur le poste local — utilisez Télécharger.",
+        )
+
+
+@app.post("/ouvrir/{job_id}/{nom}")
+def ouvrir_fichier(job_id: str, nom: str, request: Request) -> dict:
+    """Ouvre le document directement dans Excel (application de bureau, poste local uniquement)."""
+    _exiger_poste_local(request)
+    cible = _fichier_du_job(job_id, nom)
+    os.startfile(str(cible))  # noqa: S606 — chemin validé par _fichier_du_job
+    return {"ok": True}
+
+
+@app.post("/ouvrir-dossier/{job_id}")
+def ouvrir_dossier(job_id: str, request: Request) -> dict:
+    """Ouvre le dossier des documents générés dans l'explorateur (poste local uniquement)."""
+    _exiger_poste_local(request)
+    base = SORTIES_DIR.resolve()
+    dossier = (SORTIES_DIR / job_id).resolve()
+    if not job_id or dossier.parent != base or not dossier.is_dir():
+        raise HTTPException(status_code=404, detail="Dossier introuvable.")
+    os.startfile(str(dossier))  # noqa: S606
+    return {"ok": True}

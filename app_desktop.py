@@ -88,6 +88,12 @@ def main() -> int:
 
     import webview
 
+    # Sans ce réglage, la WebView IGNORE les clics de téléchargement (xlsx/zip) sans message.
+    try:
+        webview.settings["ALLOW_DOWNLOADS"] = True
+    except (AttributeError, KeyError, TypeError):
+        pass
+
     webview.create_window(
         "GB — États des lieux", f"http://{HOTE}:{PORT}", width=1320, height=880, min_size=(1000, 700)
     )

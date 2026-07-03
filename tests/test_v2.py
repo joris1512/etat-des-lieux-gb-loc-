@@ -89,6 +89,31 @@ def test_generer_revise_apprend_les_corrections(tmp_path, monkeypatch):
         charger_correspondances.cache_clear()
 
 
+def test_ouvrir_refuse_hors_poste_local():
+    # Le TestClient se présente comme « testclient » (non local) -> 403, jamais d'os.startfile.
+    r = TestClient(app).post("/ouvrir/abc/x.xlsx")
+    assert r.status_code == 403
+
+
+def test_ouvrir_lance_le_fichier_en_local(monkeypatch):
+    from types import SimpleNamespace
+
+    import app.main as main_mod
+    from app.extraction import charger_fixture  # noqa: F401 — dispo pour extension
+    from app.generation import generer
+
+    rapport, job_dir = generer(None, utiliser_fixture=True)
+    monkeypatch.setattr(main_mod, "SORTIES_DIR", job_dir.parent)
+    ouverts: list[str] = []
+    monkeypatch.setattr(main_mod.os, "startfile", lambda p: ouverts.append(p), raising=False)
+    req = SimpleNamespace(client=SimpleNamespace(host="127.0.0.1"))
+
+    main_mod.ouvrir_fichier(job_dir.name, rapport.fichiers[0], req)
+    assert ouverts and ouverts[0].endswith(rapport.fichiers[0])
+    main_mod.ouvrir_dossier(job_dir.name, req)
+    assert ouverts[1].endswith(job_dir.name)
+
+
 def test_sauvegarde_quotidienne(tmp_path, monkeypatch):
     monkeypatch.setattr(sauvegarde, "DOSSIER", tmp_path / "sauvegardes")
     db.init_db()  # crée la base isolée du test

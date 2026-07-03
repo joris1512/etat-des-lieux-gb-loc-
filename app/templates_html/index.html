@@ -415,7 +415,7 @@
       const box=$('#hist-liste');
       if(!d.length){box.innerHTML='<div class="empty"><div class="ic">'+I.doc+'</div><p>'+(q?'Aucun résultat.':'Aucun dossier pour l\'instant.')+'</p></div>';return;}
       let t='<table class="tbl"><thead><tr><th>Offre</th><th>Client</th><th>Chantier</th><th>États</th><th>Date</th><th></th></tr></thead><tbody>';
-      d.forEach(e=>{const z=e.zip_nom&&e.job_id?`<a class="dl" href="/telecharger/${encodeURIComponent(e.job_id)}/${encodeURIComponent(e.zip_nom)}">${I.dl} ZIP</a>`:'<span class="hint">expiré</span>';t+=`<tr><td class="id">${esc(e.offre||'—')}</td><td>${esc(e.client||'—')}</td><td style="color:var(--muted)">${esc(e.chantier||'—')}</td><td class="n">${e.etats}</td><td class="n" style="color:var(--muted)">${esc(e.horodatage)}</td><td>${z}</td></tr>`;});
+      d.forEach(e=>{const z=e.zip_nom&&e.job_id?`<a class="dl" href="#" data-open="/ouvrir-dossier/${encodeURIComponent(e.job_id)}" title="Ouvrir le dossier">${I.doc} Ouvrir</a> <a class="dl" href="/telecharger/${encodeURIComponent(e.job_id)}/${encodeURIComponent(e.zip_nom)}">${I.dl} ZIP</a>`:'<span class="hint">expiré</span>';t+=`<tr><td class="id">${esc(e.offre||'—')}</td><td>${esc(e.client||'—')}</td><td style="color:var(--muted)">${esc(e.chantier||'—')}</td><td class="n">${e.etats}</td><td class="n" style="color:var(--muted)">${esc(e.horodatage)}</td><td>${z}</td></tr>`;});
       box.innerHTML=t+'</tbody></table>';
     }
     $('#hist-q').addEventListener('input',e=>{clearTimeout(histT);const v=e.target.value.trim();histT=setTimeout(()=>chargerHistorique(v),250);});
@@ -483,7 +483,7 @@
         ch.generations.forEach(g=>{
           const z=g.zip_nom&&g.job_id?`<a class="dl" style="margin-left:10px" href="/telecharger/${encodeURIComponent(g.job_id)}/${encodeURIComponent(g.zip_nom)}">${I.dl} ZIP</a>`:'';
           docs+=`<div class="grp-t" style="display:flex;align-items:center">${esc(g.offre||'—')} · ${esc(g.horodatage)} · ${g.etats} états ${z}</div>`;
-          g.fichiers.forEach(f=>{nbDocs++;const t=TYPE[f.type_etat]||TYPE.individuel;const url=g.job_id?`/telecharger/${encodeURIComponent(g.job_id)}/${encodeURIComponent(f.nom)}`:null;docs+=`<div class="frow"><div class="fic ${t.ic}">${t.icon}</div><div class="fname">${esc(f.nom)}</div><div class="meta"><span class="tag ${t.ic}">${t.label}</span>${url?`<a class="dl" href="${url}">${I.dl} Télécharger</a>`:'<span class="hint">expiré</span>'}</div></div>`;});
+          g.fichiers.forEach(f=>{nbDocs++;const t=TYPE[f.type_etat]||TYPE.individuel;const url=g.job_id?`/telecharger/${encodeURIComponent(g.job_id)}/${encodeURIComponent(f.nom)}`:null;docs+=`<div class="frow"><div class="fic ${t.ic}">${t.icon}</div><div class="fname">${esc(f.nom)}</div><div class="meta"><span class="tag ${t.ic}">${t.label}</span>${url?`${lienOuvrir(url)}<a class="dl" href="${url}">${I.dl} Télécharger</a>`:'<span class="hint">expiré</span>'}</div></div>`;});
         });
       } else docs='<div class="empty" style="padding:16px"><p>Aucun état des lieux produit pour ce chantier.</p></div>';
       const histo=ch.generations.length?ch.generations.map(g=>`<div class="jrow"><span class="jdot" style="background:var(--green);box-shadow:0 0 8px var(--green-glow)"></span><span class="jl">${g.etats} états générés${g.offre?' · '+esc(g.offre):''}</span><span class="jt">${esc(g.horodatage)}</span></div>`).join(''):'<div class="empty" style="padding:16px"><p>Aucun historique.</p></div>';
@@ -565,11 +565,17 @@
       catch(e){genResult.innerHTML=`<div class="card"><div class="alert err">${I.alert}<div><div class="at">La génération a échoué</div>${esc(e.message)}</div></div></div>`;}finally{stopLoading();}}
     const TYPE={assemble:{ic:'assemble',icon:I.layers,label:'Assemblé',grp:'États assemblés'},individuel:{ic:'individuel',icon:I.box,label:'Individuel',grp:'États individuels'},sanitaire:{ic:'sanitaire',icon:I.droplet,label:'Sanitaire',grp:'Sanitaires'}};
     const typeOf=n=>{const m=/ - ([^-]+)\.xlsx$/i.exec(n);const t=(m?m[1]:'').trim().toLowerCase();return t.startsWith('assembl')?'assemble':t.startsWith('sanitaire')?'sanitaire':'individuel';};
+    /* Ouverture directe dans Excel / l'explorateur (application de bureau, poste local). */
+    async function ouvrirLocal(url){try{const r=await fetch(url,{method:'POST'});if(!r.ok){const d=await r.json().catch(()=>({}));throw new Error(d.detail||'Ouverture impossible.');}}catch(e){toast(e.message,'bad');}}
+    document.addEventListener('click',e=>{const o=e.target.closest&&e.target.closest('[data-open]');if(o){e.preventDefault();ouvrirLocal(o.dataset.open);}});
+    const lienOuvrir=url=>`<a class="dl" href="#" data-open="${url.replace('/telecharger/','/ouvrir/')}" title="Ouvrir directement dans Excel">${I.doc} Ouvrir</a>`;
     function renderResult(data){const g={assemble:[],individuel:[],sanitaire:[]};data.fichiers.forEach(f=>g[typeOf(f.nom)].push(f));
       let h='<div class="card"><div class="summary"><div class="big mono">'+data.fichiers.length+'</div><div class="lab">état(s) des lieux généré(s)</div>';
       if(data.numero_offre)h+=`<span class="chip" style="margin-left:4px">${I.file} OFFRE <b>${esc(data.numero_offre)}</b></span>`;
-      h+='<div style="margin-left:auto">';if(data.zip)h+=`<a class="btn btn-red" href="${data.zip.url}">${I.dl} Tout télécharger (ZIP)</a>`;h+='</div></div>';
-      for(const k of ['assemble','individuel','sanitaire']){const it=g[k];if(!it.length)continue;const t=TYPE[k];h+=`<div class="grp-t">${t.grp} · ${it.length}</div>`;it.forEach(f=>h+=`<div class="frow"><div class="fic ${t.ic}">${t.icon}</div><div class="fname">${esc(f.nom)}</div><div class="meta"><span class="tag ${t.ic}">${t.label}</span><a class="dl" href="${f.url}">${I.dl} Télécharger</a></div></div>`);}
+      h+='<div style="margin-left:auto;display:flex;gap:10px;align-items:center">';
+      if(data.job_id)h+=`<button type="button" class="btn btn-ghost" data-open="/ouvrir-dossier/${encodeURIComponent(data.job_id)}" title="Ouvrir le dossier des documents">${I.doc} Ouvrir le dossier</button>`;
+      if(data.zip)h+=`<a class="btn btn-red" href="${data.zip.url}">${I.dl} Tout télécharger (ZIP)</a>`;h+='</div></div>';
+      for(const k of ['assemble','individuel','sanitaire']){const it=g[k];if(!it.length)continue;const t=TYPE[k];h+=`<div class="grp-t">${t.grp} · ${it.length}</div>`;it.forEach(f=>h+=`<div class="frow"><div class="fic ${t.ic}">${t.icon}</div><div class="fname">${esc(f.nom)}</div><div class="meta"><span class="tag ${t.ic}">${t.label}</span>${lienOuvrir(f.url)}<a class="dl" href="${f.url}">${I.dl} Télécharger</a></div></div>`);}
       h+='</div>';
       if(data.avertissements&&data.avertissements.length){h+=`<div class="card" style="margin-top:18px"><div class="alert">${I.alert}<div><div class="at">À vérifier (${data.avertissements.length})</div><ul>`;data.avertissements.forEach(a=>h+=`<li>${esc(a)}</li>`);h+='</ul></div></div></div>';}
       genResult.innerHTML=h;
