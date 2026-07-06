@@ -343,6 +343,10 @@
           <div class="card"><div class="card-h">Top clients (états)</div><div id="chart-top"></div></div>
           <div class="card"><div class="card-h">Répartition par type</div><div id="chart-types"></div></div>
         </div>
+        <div class="row2" style="grid-template-columns:1fr 1fr;margin-top:18px">
+          <div class="card"><div class="card-h">Activité par mois (12 mois)</div><div id="chart-mois"></div></div>
+          <div class="card"><div class="card-h">Usages les plus demandés</div><div id="chart-usages"></div></div>
+        </div>
       </section>
 
       <!-- UTILISATEURS -->
@@ -477,17 +481,24 @@
     async function ouvrirClient(id){
       let c;try{c=await(await fetch('/clients/'+id)).json();}catch(_){toast('Chargement de la fiche impossible.','bad');return;}
       clientCourant=c;
-      const contacts=c.interlocuteurs.length?c.interlocuteurs.map(i=>`<span class="chip-soft">${I.user}${esc(i.nom)}</span>`).join(''):'<span class="hint">aucun</span>';
+      const contacts=(c.interlocuteurs.length?c.interlocuteurs.map(i=>`<span class="chip-soft">${I.user}${esc(i.nom)}<a href="#" data-del-int="${esc(i.nom)}" title="Retirer" style="margin-left:6px;color:var(--red);text-decoration:none;font-weight:700">×</a></span>`).join(''):'<span class="hint">aucun</span>')
+        +`<span style="display:inline-flex;gap:6px;margin-left:8px"><input id="int-nouveau" placeholder="Ajouter un contact…" style="height:30px;background:var(--surface);color:var(--ink);border:1px solid var(--bd2);border-radius:8px;padding:0 8px;font-size:12.5px;width:170px"><button type="button" class="btn btn-ghost btn-sm" id="int-add" style="height:30px">+</button></span>`;
       const chantiers=c.chantiers.length?('<div class="clist">'+c.chantiers.map(ch=>`<div class="ccard" data-ch="${ch.id}"><div class="cn" style="font-size:15px">${esc(ch.titre||'—')}</div><div class="cfoot" style="margin:8px 0 0">${esc([ch.adresse,ch.code_postal,ch.ville].filter(Boolean).join(', '))||'adresse inconnue'}</div><div class="cmeta" style="margin-top:12px"><div><div class="v">${fmt(ch.nb_devis)}</div><div class="k">devis</div></div><div><div class="v">${fmt(ch.nb_etats)}</div><div class="k">états</div></div></div></div>`).join('')+'</div>'):'<div class="empty" style="padding:16px"><p>Aucun chantier enregistré.</p></div>';
       $('#client-detail').innerHTML=`
         <button class="back" id="cd-back">${I.back} Retour aux clients</button>
         <div class="card"><div class="eyebrow" style="margin-bottom:6px">// FICHE CLIENT</div><h1 class="title" style="font-size:28px">${esc(c.raison_sociale)}</h1>
-          <div class="kv" style="margin-top:20px">
-            <div class="k">N° Client</div><div class="mono" style="color:var(--green)">${esc(c.numero_client||'—')}</div>
-            <div class="k">Adresse</div><div>${esc([c.adresse,c.code_postal,c.ville].filter(Boolean).join(', '))||'—'}</div>
-            <div class="k">Activité</div><div>${fmt(c.nb_devis)} devis · <span style="color:var(--muted)">${fmt(c.nb_etats)} états produits</span></div>
-            <div class="k">Interlocuteurs</div><div>${contacts}</div>
+          <div class="fgrid" style="margin-top:20px;align-items:end">
+            <div class="field" style="max-width:140px"><label>N° Client</label><input data-cli="numero_client" value="${esc(c.numero_client||'')}"></div>
+            <div class="field"><label>Adresse</label><input data-cli="adresse" value="${esc(c.adresse||'')}"></div>
+            <div class="field" style="max-width:110px"><label>CP</label><input data-cli="code_postal" value="${esc(c.code_postal||'')}"></div>
+            <div class="field"><label>Ville</label><input data-cli="ville" value="${esc(c.ville||'')}"></div>
           </div>
+          <div class="field" style="margin-top:12px"><label>Notes internes (commercial, particularités, historique…)</label><textarea data-cli="notes" rows="3" style="width:100%;background:var(--surface);color:var(--ink);border:1px solid var(--bd2);border-radius:var(--rc);padding:10px;font-family:var(--sans);font-size:13.5px;resize:vertical">${esc(c.notes||'')}</textarea></div>
+          <div style="display:flex;align-items:center;gap:14px;margin-top:12px;flex-wrap:wrap">
+            <button type="button" class="btn btn-primary" id="cd-save">Enregistrer la fiche</button>
+            <span class="hint">${fmt(c.nb_devis)} devis · ${fmt(c.nb_etats)} états produits · vu la dernière fois le ${esc((c.derniere_vue||'').slice(0,10))}</span>
+          </div>
+          <div class="kv" style="margin-top:16px"><div class="k">Interlocuteurs</div><div>${contacts}</div></div>
         </div>
         <div class="card"><div class="card-h"><span class="ic">${I.pin}</span> Chantiers · ${c.chantiers.length} <span style="margin-left:auto;color:var(--faint);font-weight:400;text-transform:none;letter-spacing:0">cliquez pour ouvrir le dossier</span></div>${chantiers}</div>
         <div class="card" style="display:flex;align-items:center;gap:14px;flex-wrap:wrap">
@@ -502,6 +513,21 @@
         catch(e){toast(e.message,'bad');}
       });
       $('#client-detail').querySelectorAll('[data-ch]').forEach(el=>el.addEventListener('click',()=>ouvrirChantier(el.dataset.ch)));
+      $('#cd-save').addEventListener('click',async()=>{
+        const corps={};$('#client-detail').querySelectorAll('[data-cli]').forEach(i=>corps[i.dataset.cli]=i.value);
+        try{const r=await fetch('/clients/'+c.id,{method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify(corps)});const d=await r.json();if(!r.ok)throw new Error(d.detail||'Erreur');toast('Fiche enregistrée.','ok');}
+        catch(e){toast(e.message,'bad');}
+      });
+      $('#int-add').addEventListener('click',async()=>{
+        const nom=$('#int-nouveau').value.trim();if(!nom)return;
+        try{const r=await fetch('/clients/'+c.id+'/interlocuteurs',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({nom})});const d=await r.json();if(!r.ok)throw new Error(d.detail||'Erreur');toast('Contact ajouté.','ok');ouvrirClient(c.id);}
+        catch(e){toast(e.message,'bad');}
+      });
+      $('#client-detail').querySelectorAll('[data-del-int]').forEach(a=>a.addEventListener('click',async(ev)=>{
+        ev.preventDefault();
+        try{const r=await fetch('/clients/'+c.id+'/interlocuteurs?nom='+encodeURIComponent(a.dataset.delInt),{method:'DELETE'});const d=await r.json();if(!r.ok)throw new Error(d.detail||'Erreur');toast('Contact retiré.','ok');ouvrirClient(c.id);}
+        catch(e){toast(e.message,'bad');}
+      }));
       masquerClients();$('#client-detail').style.display='block';window.scrollTo({top:0,behavior:'smooth'});
     }
     async function ouvrirChantier(id){
@@ -540,6 +566,10 @@
         `<div class="hbar"><div class="hl">Assemblés</div><div class="track"><div class="fill g" style="width:${Math.round(100*ty.assembles/tt)}%"></div></div><div class="hv">${ty.assembles}</div></div>`+
         `<div class="hbar"><div class="hl">Sanitaires</div><div class="track"><div class="fill b" style="width:${Math.round(100*ty.sanitaires/tt)}%"></div></div><div class="hv">${ty.sanitaires}</div></div>`+
         (ty.non_reconnus?`<div class="hbar"><div class="hl">Non reconnus</div><div class="track"><div class="fill n" style="width:${Math.round(100*ty.non_reconnus/tt)}%"></div></div><div class="hv">${ty.non_reconnus}</div></div>`:'');
+      const mois=d.par_mois||[];const maxM=Math.max(1,...mois.map(x=>x.etats));
+      $('#chart-mois').innerHTML=mois.length?('<div class="cbars">'+mois.map(x=>`<div class="cbar" style="height:${Math.round(100*x.etats/maxM)}%" title="${esc(x.mois)} : ${x.etats} états (${x.generations} génération(s))"><span class="cv">${x.etats||''}</span></div>`).join('')+'</div><div class="clbls">'+mois.map(x=>`<div>${esc((x.mois||'').slice(5,7)+'/'+(x.mois||'').slice(2,4))}</div>`).join('')+'</div>'):'<div class="empty" style="padding:20px"><p>Pas encore de données.</p></div>';
+      const us=d.top_usages||[];const maxU=Math.max(1,...us.map(x=>x.n));
+      $('#chart-usages').innerHTML=us.length?us.map(x=>`<div class="hbar"><div class="hl">${esc(x.usage)}</div><div class="track"><div class="fill g" style="width:${Math.round(100*x.n/maxU)}%"></div></div><div class="hv">${x.n}</div></div>`).join(''):'<div class="empty" style="padding:20px"><p>Pas encore de données.</p></div>';
     }
 
     /* Dropzones */

@@ -382,6 +382,37 @@ def client_detail_endpoint(client_id: int) -> dict:
     return c
 
 
+@app.patch("/clients/{client_id}")
+async def client_modifier_endpoint(client_id: int, corps: dict, request: Request) -> dict:
+    """Édition de la fiche client : coordonnées, n° client, notes libres."""
+    try:
+        ok = db.modifier_client(client_id, corps)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    if not ok:
+        raise HTTPException(status_code=404, detail="Client introuvable.")
+    logger.info("AUDIT fiche client n° %s modifiée par %s", client_id, utilisateur_courant(request))
+    return db.lire_client(client_id)
+
+
+@app.post("/clients/{client_id}/interlocuteurs")
+async def interlocuteur_ajouter_endpoint(client_id: int, corps: dict) -> dict:
+    try:
+        db.ajouter_interlocuteur(client_id, corps.get("nom") or "")
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    return db.lire_client(client_id)
+
+
+@app.delete("/clients/{client_id}/interlocuteurs")
+def interlocuteur_supprimer_endpoint(client_id: int, nom: str) -> dict:
+    db.supprimer_interlocuteur(client_id, nom)
+    c = db.lire_client(client_id)
+    if not c:
+        raise HTTPException(status_code=404, detail="Client introuvable.")
+    return c
+
+
 @app.delete("/clients/{client_id}")
 def client_supprimer_endpoint(client_id: int, request: Request) -> dict:
     """Efface un client et toutes ses données (RGPD — droit à l'effacement), fichiers compris."""

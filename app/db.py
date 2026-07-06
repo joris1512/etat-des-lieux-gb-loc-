@@ -117,6 +117,10 @@ def init_db() -> None:
         cols_j = [r["name"] for r in cx.execute("PRAGMA table_info(journal)")]
         if "client_id" not in cols_j:
             cx.execute("ALTER TABLE journal ADD COLUMN client_id INTEGER")
+        # Migration douce : notes libres sur la fiche client.
+        cols_c = [r["name"] for r in cx.execute("PRAGMA table_info(clients)")]
+        if "notes" not in cols_c:
+            cx.execute("ALTER TABLE clients ADD COLUMN notes TEXT")
     _pret = True
 
 
@@ -571,6 +575,57 @@ def lire_client(client_id: int) -> dict | None:
     return d
 
 
+_CHAMPS_CLIENT_MODIFIABLES = (
+    "raison_sociale", "numero_client", "adresse", "code_postal", "ville", "notes"
+)
+
+
+def modifier_client(client_id: int, champs: dict) -> bool:
+    """Met à jour la fiche client (champs autorisés uniquement). False si client inconnu."""
+    _ensure()
+    a_jour = {k: (champs.get(k) or "").strip() for k in _CHAMPS_CLIENT_MODIFIABLES if k in champs}
+    if "raison_sociale" in a_jour and not a_jour["raison_sociale"]:
+        raise ValueError("La raison sociale ne peut pas être vide.")
+    if not a_jour:
+        return True
+    with _conn() as cx:
+        if cx.execute("SELECT 1 FROM clients WHERE id=?", (client_id,)).fetchone() is None:
+            return False
+        sets = ", ".join(f"{k}=?" for k in a_jour)
+        cx.execute(f"UPDATE clients SET {sets} WHERE id=?", (*a_jour.values(), client_id))  # noqa: S608 — clés filtrées par liste blanche
+    return True
+
+
+def ajouter_interlocuteur(client_id: int, nom: str) -> None:
+    """Ajoute un interlocuteur à la fiche (sans doublon, insensible à la casse)."""
+    _ensure()
+    nom = (nom or "").strip()
+    if not nom:
+        raise ValueError("Nom d'interlocuteur requis.")
+    iso = datetime.now().isoformat(timespec="seconds")
+    with _conn() as cx:
+        if cx.execute("SELECT 1 FROM clients WHERE id=?", (client_id,)).fetchone() is None:
+            raise ValueError("Client introuvable.")
+        ex = cx.execute(
+            "SELECT 1 FROM interlocuteurs WHERE client_id=? AND nom=? COLLATE NOCASE",
+            (client_id, nom),
+        ).fetchone()
+        if ex is None:
+            cx.execute(
+                "INSERT INTO interlocuteurs (client_id, nom, premiere_vue, derniere_vue) VALUES (?,?,?,?)",
+                (client_id, nom, iso, iso),
+            )
+
+
+def supprimer_interlocuteur(client_id: int, nom: str) -> None:
+    _ensure()
+    with _conn() as cx:
+        cx.execute(
+            "DELETE FROM interlocuteurs WHERE client_id=? AND nom=? COLLATE NOCASE",
+            (client_id, (nom or "").strip()),
+        )
+
+
 def lire_chantier(chantier_id: int) -> dict | None:
     """Contenu complet d'un chantier : client, devis, états des lieux (fichiers), historique."""
     _ensure()
@@ -621,8 +676,21 @@ def stats_avancees() -> dict:
             """SELECT COALESCE(SUM(nb_assembles),0) a, COALESCE(SUM(nb_individuels),0) i,
                COALESCE(SUM(nb_sanitaires),0) s, COALESCE(SUM(nb_non_reconnus),0) nr FROM generations"""
         ).fetchone()
+        par_mois = cx.execute(
+            """SELECT substr(horodatage,1,7) AS mois, COUNT(*) AS generations,
+                 COALESCE(SUM(nb_etats),0) AS etats
+               FROM generations GROUP BY mois ORDER BY mois DESC LIMIT 12"""
+        ).fetchall()
+        # Usages les plus fréquents (blocs des documents produits : vestiaires, réfectoires…).
+        usages = cx.execute(
+            """SELECT UPPER(TRIM(bloc)) AS usage, COUNT(*) AS n FROM fichiers
+               WHERE bloc IS NOT NULL AND TRIM(bloc) <> ''
+               GROUP BY UPPER(TRIM(bloc)) ORDER BY n DESC LIMIT 8"""
+        ).fetchall()
     return {
         "serie": [dict(r) for r in reversed(serie)],
         "top_clients": [dict(r) for r in top],
         "types": {"assembles": t["a"], "individuels": t["i"], "sanitaires": t["s"], "non_reconnus": t["nr"]},
+        "par_mois": [dict(r) for r in reversed(par_mois)],
+        "top_usages": [dict(r) for r in usages],
     }
