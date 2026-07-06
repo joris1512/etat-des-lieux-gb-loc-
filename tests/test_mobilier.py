@@ -1,10 +1,12 @@
-"""Le mobilier du devis est reporté INTÉGRALEMENT, tel quel, sur les états des lieux."""
+"""Mobilier sur les états : libellés courts « norme GB », quantités regroupées, rien de perdu."""
 
 from openpyxl import load_workbook
 
 from app.assemblage import construire_plan
 from app.extraction import charger_fixture
 from app.generation import generer
+from app.models import MobilierItem
+from app.remplissage import _lignes_inventaire
 
 
 def _plan_et_fichiers():
@@ -18,19 +20,34 @@ def _ws(job_dir, nom):
     return wb[wb.sheetnames[0]]
 
 
-def test_vestiaire_recoit_tout_son_mobilier_tel_quel():
-    # VESTIAIRE HOMMES : 10 armoires + 2 bancs -> TOUT est écrit, désignations du devis incluses.
+def test_libelles_courts_et_regroupement():
+    lignes = _lignes_inventaire(
+        [
+            MobilierItem(designation="TABLE MODULAIRE RECT. 160X80", quantite=4),
+            MobilierItem(designation="TABLE PLIANTE 120", quantite=1),  # regroupée avec l'autre
+            MobilierItem(designation="ARMOIRE BASSE PORTES BATTANTES 1000*800*380", quantite=1),
+            MobilierItem(designation="ACCESSOIRE EVIER + CHAUFFE EAU", quantite=2),
+            MobilierItem(designation="OBJET INCONNU SPECIAL", quantite=3),  # repli : tel quel
+        ]
+    )
+    assert lignes[0] == "Tables : 5"
+    assert "Armoires bureau basses : 1" in lignes
+    assert "Evier + chauffe-eau : 2" in lignes
+    assert "OBJET INCONNU SPECIAL : 3" in lignes
+
+
+def test_vestiaire_norme_gb():
     rapport, job_dir, par_nom = _plan_et_fichiers()
     nom = next(
         n for n, e in par_nom.items()
         if e.bloc == "VESTIAIRE HOMMES" and n in rapport.fichiers
     )
     a46 = str(_ws(job_dir, nom)["A46"].value)
-    assert "ARMOIRE DOUBLE VESTIAIRE : 10" in a46
-    assert "BANC PLIANT 1.60M BOIS STRUCTURE METAL : 2" in a46  # même sans ligne pré-imprimée
+    assert "Armoires doubles : 10" in a46
+    assert "Bancs : 2" in a46
 
 
-def test_salle_reunion_assemblee_liste_complete():
+def test_salle_reunion_assemblee_norme_gb():
     rapport, job_dir, par_nom = _plan_et_fichiers()
     nom = next(
         n for n, e in par_nom.items()
@@ -38,23 +55,22 @@ def test_salle_reunion_assemblee_liste_complete():
     )
     ws = _ws(job_dir, nom)
     lignes = [str(ws[f"A{r}"].value) for r in range(43, 48)]
-    assert any("TABLE MODULAIRE RECT. 160X80 : 4" in x for x in lignes)
-    assert any("CHAISE COQUE : 20" in x for x in lignes)
-    assert any("ARMOIRE BASSE" in x and ": 1" in x for x in lignes)
+    assert "Tables : 4" in lignes
+    assert "Chaises : 20" in lignes
+    assert "Armoires bureau basses : 1" in lignes
 
 
-def test_refectoire_mixte_va_sur_assemble_classique_et_liste_tout():
-    # Mobilier mixte (tables + bancs + kitchenette) -> assemblé CLASSIQUE (5 lignes), pas le kit.
+def test_refectoire_mixte_liste_complete_norme_gb():
     rapport, job_dir, par_nom = _plan_et_fichiers()
     etat = next(
         e for e in par_nom.values()
         if e.type_etat == "assemble" and e.bloc == "REFECTOIRE"
     )
-    assert etat.modele == "bungalow_assemble.xlsx"
+    assert etat.modele == "bungalow_assemble.xlsx"  # mixte -> classique (5 lignes), pas le kit
     ws = _ws(job_dir, etat.nom_fichier)
     contenu = " | ".join(str(ws[f"A{r}"].value) for r in range(43, 48))
-    for attendu in ("TABLE MODULAIRE", "BANC PLIANT", "REFRIGERATEUR", "MICRO ONDES", "EVIER"):
-        assert attendu in contenu  # rien n'est perdu, même frigo/micro-ondes
+    for attendu in ("Tables : 4", "Bancs : 8", "Frigo : 2", "Micro-ondes : 2", "Evier + chauffe-eau : 2"):
+        assert attendu in contenu
 
 
 def test_aucun_avertissement_mobilier_sur_eiffage():
@@ -64,7 +80,6 @@ def test_aucun_avertissement_mobilier_sur_eiffage():
 
 def test_kit_reste_choisi_quand_kitchenette_seule():
     from app.assemblage import _kitchenette_seulement
-    from app.models import MobilierItem
 
     frigo = [MobilierItem(designation="ACCESSOIRE REFRIGERATEUR", quantite=1)]
     mixte = frigo + [MobilierItem(designation="TABLE MODULAIRE", quantite=2)]

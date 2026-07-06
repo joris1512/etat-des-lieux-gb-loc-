@@ -58,6 +58,38 @@ def _cfg_modele(modele: str) -> dict:
     return resolu
 
 
+@lru_cache
+def _libelles_mobilier() -> tuple[tuple[str, str], ...]:
+    """Table (motif normalisé, libellé court) triée du motif le plus long au plus court."""
+    entrees = []
+    for e in _config_cellules().get("mobilier_libelles") or []:
+        motif = normaliser(str(e.get("motif") or ""))
+        libelle = str(e.get("libelle") or "").strip()
+        if motif and libelle:
+            entrees.append((motif, libelle))
+    entrees.sort(key=lambda x: -len(x[0]))
+    return tuple(entrees)
+
+
+def _libelle_court(designation: str) -> str:
+    """Libellé « norme GB » d'un article (ex. « Tables ») ; désignation d'origine sinon."""
+    cible = normaliser(designation)
+    for motif, libelle in _libelles_mobilier():
+        if motif in cible:
+            return libelle
+    return designation.strip()
+
+
+def _lignes_inventaire(mobilier) -> list[str]:
+    """Liste « Libellé : quantité » : articles regroupés par libellé court, quantités sommées,
+    ordre d'apparition du devis préservé."""
+    totaux: dict[str, int] = {}
+    for item in mobilier:
+        cle = _libelle_court(item.designation)
+        totaux[cle] = totaux.get(cle, 0) + item.quantite
+    return [f"{libelle} : {qte}" for libelle, qte in totaux.items()]
+
+
 def _cellule_mobilier(designation: str, table: dict[str, str]) -> str | None:
     """Trouve la cellule pour une désignation via mot-clé (le plus long qui correspond gagne)."""
     cible = normaliser(designation)
@@ -116,7 +148,7 @@ def remplir_etat(
     #    s'il y a plus d'articles que de lignes, le reste est regroupé sur la dernière.
     zone = cfg.get("mobilier_zone") or []
     if zone and etat.mobilier:
-        lignes = [f"{item.designation} : {item.quantite}" for item in etat.mobilier]
+        lignes = _lignes_inventaire(etat.mobilier)
         if len(zone) == 1:
             a_ecrire[zone[0]] = "\n".join(lignes)
         else:

@@ -29,6 +29,28 @@ bungalow_variantes:
   refectoire_kitchenette: bungalow_refectoire_kitchenette.xlsx
   petite_enfance: bungalow_petite_enfance.xlsx
 
+# Libellés courts du mobilier sur les états des lieux (norme GB) : le devis dit
+# « TABLE MODULAIRE RECT. 160X80 », l'état affiche « Tables : N ». Le motif le plus long
+# qui correspond gagne ; les articles regroupés sous un même libellé additionnent leurs
+# quantités ; un article sans correspondance garde sa désignation du devis telle quelle.
+mobilier_libelles:
+  - {motif: EVIER CHAUFFE EAU, libelle: "Evier + chauffe-eau"}
+  - {motif: ARMOIRE DOUBLE, libelle: "Armoires doubles"}
+  - {motif: ARMOIRE HAUTE, libelle: "Armoires bureau hautes"}
+  - {motif: ARMOIRE BASSE, libelle: "Armoires bureau basses"}
+  - {motif: MICRO ONDES, libelle: "Micro-ondes"}
+  - {motif: REFRIGERATEUR, libelle: "Frigo"}
+  - {motif: CHAUFFE EAU, libelle: "Chauffe-eau"}
+  - {motif: PLAQUE, libelle: "Plaques électriques"}
+  - {motif: FAUTEUIL, libelle: "Fauteuils"}
+  - {motif: CAISSON, libelle: "Caissons"}
+  - {motif: ARMOIRE, libelle: "Armoires"}
+  - {motif: CHAISE, libelle: "Chaises"}
+  - {motif: TABLE, libelle: "Tables"}
+  - {motif: EVIER, libelle: "Evier"}
+  - {motif: BANC, libelle: "Bancs"}
+  - {motif: RING, libelle: "Ring en toiture"}
+
 # Fonctions de bungalow reconnues -> texte canonique reporté sur la ligne « fonction ».
 # Pour chaque fonction, les mots-clés cherchés dans le « bloc » du devis (après normalisation :
 # majuscules / sans accents). Le 1er motif trouvé gagne : l'ordre fixe donc la priorité.
