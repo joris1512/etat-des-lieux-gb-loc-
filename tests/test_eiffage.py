@@ -41,11 +41,15 @@ def test_sanitaires_bons_modeles():
     assert modeles == ["sanitaire_2wc_2d_2u.xlsx", "sanitaire_2wc_pmr.xlsx"]
 
 
-def test_salle_reunion_assemble_porte_20_chaises():
+def test_salle_reunion_mobilier_sur_individuel_pas_sur_assemble():
     plan = construire_plan(charger_fixture())
-    sr = next(e for e in plan.etats if e.type_etat == "assemble" and e.bloc == "SALLE DE REUNION")
-    chaises = sum(m.quantite for m in sr.mobilier if "CHAISE" in m.designation.upper())
-    assert chaises == 20
+    sr_assemble = next(
+        e for e in plan.etats if e.type_etat == "assemble" and e.bloc == "SALLE DE REUNION"
+    )
+    assert sr_assemble.mobilier == []  # l'assemblé ne porte jamais le mobilier
+    indivs = [e for e in plan.etats if e.type_etat == "individuel" and e.bloc == "SALLE DE REUNION"]
+    chaises = sum(m.quantite for e in indivs for m in e.mobilier if "CHAISE" in m.designation.upper())
+    assert chaises == 20  # ... il est sur le module dont la ligne de devis le liste
 
 
 def test_generation_complete_produit_17_fichiers_et_zip():

@@ -36,3 +36,5 @@ GRAND SANITAIRE DOUCHE,douches.xlsx,sanitaire,false
 1WC 1D 1U,sanitaire_petit_mixte.xlsx,sanitaire,false
 POLYSANI HANDI,polysani_handi.xlsx,sanitaire,false
 POLYSANI,polysani_homme_femme.xlsx,sanitaire,false
+GD SANI,polysani_homme_femme.xlsx,sanitaire,false
+5 WC 3 URIN,polysani_homme_femme.xlsx,sanitaire,false

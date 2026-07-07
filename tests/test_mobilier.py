@@ -47,28 +47,40 @@ def test_vestiaire_norme_gb():
     assert "Bancs : 2" in a46
 
 
-def test_salle_reunion_assemblee_norme_gb():
+def test_assemble_sans_mobilier_lignes_intactes():
+    # Règle métier : l'assemblé ne porte JAMAIS le mobilier -> lignes d'inventaire vierges.
     rapport, job_dir, par_nom = _plan_et_fichiers()
     nom = next(
         n for n, e in par_nom.items()
         if e.type_etat == "assemble" and e.bloc == "SALLE DE REUNION" and n in rapport.fichiers
     )
     ws = _ws(job_dir, nom)
-    lignes = [str(ws[f"A{r}"].value) for r in range(43, 48)]
-    assert "Tables : 4" in lignes
-    assert "Chaises : 20" in lignes
-    assert "Armoires bureau basses : 1" in lignes
+    lignes = [str(ws[f"A{r}"].value).strip() for r in range(43, 48)]
+    assert "Chaise :" in lignes  # libellés d'origine du modèle, non remplis
+    assert not any(x.split(":")[-1].strip().isdigit() for x in lignes if ":" in x)
 
 
-def test_refectoire_mixte_liste_complete_norme_gb():
+def test_salle_reunion_mobilier_sur_individuel():
     rapport, job_dir, par_nom = _plan_et_fichiers()
     etat = next(
         e for e in par_nom.values()
-        if e.type_etat == "assemble" and e.bloc == "REFECTOIRE"
+        if e.type_etat == "individuel" and e.bloc == "SALLE DE REUNION" and e.mobilier
     )
-    assert etat.modele == "bungalow_assemble.xlsx"  # mixte -> classique (5 lignes), pas le kit
+    a46 = str(_ws(job_dir, etat.nom_fichier)["A46"].value)
+    assert "Tables : 4" in a46
+    assert "Chaises : 20" in a46
+    assert "Armoires bureau basses : 1" in a46
+
+
+def test_refectoire_mobilier_sur_individuel_norme_gb():
+    rapport, job_dir, par_nom = _plan_et_fichiers()
+    etat = next(
+        e for e in par_nom.values()
+        if e.type_etat == "individuel" and e.bloc == "REFECTOIRE" and e.mobilier
+    )
+    assert etat.modele == "bungalow_refectoire_kitchenette.xlsx"
     ws = _ws(job_dir, etat.nom_fichier)
-    contenu = " | ".join(str(ws[f"A{r}"].value) for r in range(43, 48))
+    contenu = str(ws["A49"].value) + " · " + str(ws["A50"].value)
     for attendu in ("Tables : 4", "Bancs : 8", "Frigo : 2", "Micro-ondes : 2", "Evier + chauffe-eau : 2"):
         assert attendu in contenu
 

@@ -31,11 +31,12 @@ def test_deux_bungalows_meme_bloc_donnent_assemble_plus_deux():
     plan = construire_plan(ExtractionDevis(entete=ENTETE, articles=arts))
     types = [e.type_etat for e in plan.etats]
     assert types == ["assemble", "individuel", "individuel"]
-    # Le mobilier va sur l'assemblé ; les individuels sont en-tête seule.
+    # Le mobilier va sur les INDIVIDUELS (chacun garde SA ligne de devis), jamais sur l'assemblé.
     assemble = plan.etats[0]
     assert assemble.nb_modules == 2
-    assert sum(m.quantite for m in assemble.mobilier) == 4
-    assert all(e.mobilier == [] for e in plan.etats[1:])
+    assert assemble.mobilier == []
+    assert plan.etats[1].mobilier == []  # 1er module : pas de mobilier au devis
+    assert sum(m.quantite for m in plan.etats[2].mobilier) == 4  # 2e module : ses 4 tables
 
 
 def test_blocs_differents_ne_fusionnent_pas():

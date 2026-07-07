@@ -6,8 +6,9 @@ Règle (la seule vraie logique) :
 - 1 seule ligne BUNGALOW = 1 état individuel classique.
 - Un sanitaire / module spécial (est_bungalow=False) = 1 état individuel avec son propre modèle.
 
-Le mobilier d'un bloc est mis en commun et reporté sur l'état ASSEMBLÉ (qui représente l'unité
-complète) ; pour un bloc d'un seul module, le mobilier va sur l'état individuel.
+Le mobilier va TOUJOURS sur les états INDIVIDUELS (chaque module garde le mobilier de SA ligne
+de devis) — jamais sur l'état assemblé, qui ne sert qu'à l'inspection de l'ensemble. Le mobilier
+mis en commun du bloc ne sert qu'à CHOISIR la variante du modèle assemblé (kit kitchenette ou non).
 """
 
 from __future__ import annotations
@@ -188,7 +189,7 @@ def construire_plan(extraction: ExtractionDevis) -> PlanGeneration:
         mobilier = _fusionner_mobilier(articles)
         n = len(articles)
         if n >= 2:
-            # 1 état assemblé (porte le mobilier ; « kit » seulement si 100 % kitchenette) ...
+            # 1 état assemblé SANS mobilier (le mobilier commun ne sert qu'au choix kit/classique)…
             plan.etats.append(
                 EtatDesLieux(
                     modele=_modele_assemble(avec_kitchenette=_kitchenette_seulement(mobilier)),
@@ -197,11 +198,11 @@ def construire_plan(extraction: ExtractionDevis) -> PlanGeneration:
                     fonction=fonction,
                     texte_ligne=articles[0].texte_ligne,
                     nb_modules=n,
-                    mobilier=mobilier,
+                    mobilier=[],
                     nom_fichier=nom_fichier(bloc, "assemblé"),
                 )
             )
-            # ... + N individuels (en-tête seule), chacun avec SON modèle résolu.
+            # … + N individuels, chacun avec SON modèle résolu et le mobilier de SA ligne de devis.
             for i in range(1, n + 1):
                 art_i, modele_i = run[i - 1]
                 plan.etats.append(
@@ -213,7 +214,7 @@ def construire_plan(extraction: ExtractionDevis) -> PlanGeneration:
                         texte_ligne=art_i.texte_ligne,
                         nb_modules=1,
                         index_module=i,
-                        mobilier=[],
+                        mobilier=list(art_i.mobilier),
                         nom_fichier=nom_fichier(bloc, f"individuel {i}"),
                     )
                 )
