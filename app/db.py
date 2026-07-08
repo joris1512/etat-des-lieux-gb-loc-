@@ -626,6 +626,22 @@ def supprimer_interlocuteur(client_id: int, nom: str) -> None:
         )
 
 
+def infos_job(job_id: str) -> dict:
+    """Client / chantier / offre d'un dossier de génération (pour l'en-tête du constat PDF)."""
+    _ensure()
+    with _conn() as cx:
+        r = cx.execute(
+            """SELECT c.raison_sociale AS client, ch.titre AS chantier, d.numero_offre AS offre
+               FROM generations g
+               LEFT JOIN clients c ON c.id = g.client_id
+               LEFT JOIN chantiers ch ON ch.id = g.chantier_id
+               LEFT JOIN devis d ON d.id = g.devis_id
+               WHERE g.job_id = ? ORDER BY g.id DESC LIMIT 1""",
+            (job_id,),
+        ).fetchone()
+    return dict(r) if r else {}
+
+
 def lire_chantier(chantier_id: int) -> dict | None:
     """Contenu complet d'un chantier : client, devis, états des lieux (fichiers), historique."""
     _ensure()

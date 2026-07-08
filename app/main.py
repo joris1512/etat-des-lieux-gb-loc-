@@ -13,7 +13,7 @@ from fastapi import Depends, FastAPI, File, Form, HTTPException, Request, Upload
 from fastapi.responses import FileResponse, HTMLResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 
-from app import db, import_csv
+from app import db, import_csv, terrain
 from app.assemblage import construire_plan, resoudre_modele
 from app.config import HTML_DIR, SORTIES_DIR, STATIC_DIR, VERSION, get_reglages
 from app.sauvegarde import sauvegarder_quotidienne
@@ -534,6 +534,120 @@ def _fichier_du_job(job_id: str, nom: str) -> Path:
     if not cible.exists():
         raise HTTPException(status_code=404, detail="Fichier introuvable.")
     return cible
+
+
+# --------------------------------------------------------------------------- #
+# Mode chauffeur (terrain) : constat début/fin, photos, signature, PDF, partage
+# --------------------------------------------------------------------------- #
+def _contexte_constat(job_id: str, nom: str):
+    document = _fichier_du_job(job_id, nom)
+    if document.suffix.lower() != ".xlsx":
+        raise HTTPException(status_code=400, detail="Constat disponible sur les documents Excel.")
+    dossier = terrain.dossier_constat(document.parent, nom)
+    return document, dossier
+
+
+@app.get("/terrain/{job_id}/{nom}")
+def constat_lire(job_id: str, nom: str) -> dict:
+    document, dossier = _contexte_constat(job_id, nom)
+    return terrain.charger_constat(document, None, dossier)
+
+
+@app.post("/terrain/{job_id}/{nom}")
+async def constat_enregistrer(job_id: str, nom: str, corps: dict) -> dict:
+    document, dossier = _contexte_constat(job_id, nom)
+    lignes = corps.get("lignes") or []
+    try:
+        terrain.enregistrer_constat(document, None, lignes, dossier)
+    except Exception as exc:  # noqa: BLE001
+        raise HTTPException(status_code=422, detail=f"Enregistrement impossible : {exc}") from exc
+    return terrain.charger_constat(document, None, dossier)
+
+
+@app.post("/terrain/{job_id}/{nom}/photo")
+async def constat_photo(job_id: str, nom: str, fichier: UploadFile = File(...)) -> dict:
+    document, dossier = _contexte_constat(job_id, nom)
+    contenu = await fichier.read()
+    if not contenu or len(contenu) > 8 * 1024 * 1024:
+        raise HTTPException(status_code=400, detail="Photo requise (8 Mo max).")
+    try:
+        terrain.ajouter_photo(dossier, contenu)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    return terrain.charger_constat(document, None, dossier)
+
+
+@app.post("/terrain/{job_id}/{nom}/signature")
+async def constat_signature(job_id: str, nom: str, corps: dict) -> dict:
+    document, dossier = _contexte_constat(job_id, nom)
+    image = corps.get("image") or ""
+    prefixe = "data:image/png;base64,"
+    if not image.startswith(prefixe):
+        raise HTTPException(status_code=400, detail="Signature invalide.")
+    import base64
+
+    try:
+        png = base64.b64decode(image[len(prefixe):])
+        terrain.enregistrer_signature(dossier, png, corps.get("signataire") or "")
+    except Exception as exc:  # noqa: BLE001
+        raise HTTPException(status_code=400, detail=f"Signature illisible : {exc}") from exc
+    logger.info("AUDIT constat signé : %s (%s)", nom, job_id)
+    return terrain.charger_constat(document, None, dossier)
+
+
+@app.post("/terrain/{job_id}/{nom}/pdf")
+def constat_pdf(job_id: str, nom: str) -> dict:
+    document, dossier = _contexte_constat(job_id, nom)
+    infos = db.infos_job(job_id)
+    sous_titre = " · ".join(x for x in (infos.get("client"), infos.get("chantier"), infos.get("offre")) if x)
+    societe = db.lire_parametre("societe", "") or ""
+    terrain.generer_pdf(dossier, titre=Path(nom).stem, sous_titre=sous_titre, societe=societe)
+    return terrain.charger_constat(document, None, dossier)
+
+
+@app.get("/terrain-fichier/{job_id}/{nom}/{piece}")
+def constat_piece(job_id: str, nom: str, piece: str) -> FileResponse:
+    """Sert une pièce du constat (photo / PDF) avec les mêmes gardes que les documents."""
+    _document, dossier = _contexte_constat(job_id, nom)
+    base_piece = Path(piece.replace("\\", "/")).name
+    if not base_piece or base_piece != piece:
+        raise HTTPException(status_code=400, detail="Chemin invalide.")
+    cible = (dossier / base_piece).resolve()
+    if cible.parent != dossier.resolve() or not cible.exists():
+        raise HTTPException(status_code=404, detail="Pièce introuvable.")
+    media = "application/pdf" if cible.suffix == ".pdf" else "image/png" if cible.suffix == ".png" else "image/jpeg"
+    return FileResponse(cible, filename=base_piece, media_type=media)
+
+
+@app.post("/terrain/{job_id}/{nom}/partager")
+def constat_partager(job_id: str, nom: str, request: Request) -> dict:
+    """Ouvre un e-mail prérempli avec le PDF de constat en pièce jointe (poste local)."""
+    _exiger_poste_local(request)
+    document, dossier = _contexte_constat(job_id, nom)
+    pdf = dossier / "constat.pdf"
+    if not pdf.exists():
+        infos = db.infos_job(job_id)
+        sous_titre = " · ".join(x for x in (infos.get("client"), infos.get("chantier")) if x)
+        terrain.generer_pdf(dossier, titre=Path(nom).stem, sous_titre=sous_titre,
+                            societe=db.lire_parametre("societe", "") or "")
+    infos = db.infos_job(job_id)
+    sujet = f"État des lieux — {infos.get('chantier') or Path(nom).stem}"
+    script = (
+        "$o = New-Object -ComObject Outlook.Application; $m = $o.CreateItem(0); "
+        f"$m.Subject = '{sujet.replace(chr(39), ' ')}'; "
+        "$m.Body = 'Bonjour,`r`n`r`nVeuillez trouver ci-joint le constat d''état des lieux.`r`n'; "
+        f"$m.Attachments.Add('{pdf}') | Out-Null; $m.Display()"
+    )
+    import subprocess
+
+    essai = subprocess.run(
+        ["powershell", "-NoProfile", "-Command", script],
+        capture_output=True, timeout=30, check=False,
+    )
+    if essai.returncode != 0:  # pas d'Outlook : on ouvre le dossier du constat
+        os.startfile(str(dossier))  # noqa: S606
+        return {"ok": True, "mode": "dossier"}
+    return {"ok": True, "mode": "outlook"}
 
 
 @app.get("/telecharger/{job_id}/{nom}")

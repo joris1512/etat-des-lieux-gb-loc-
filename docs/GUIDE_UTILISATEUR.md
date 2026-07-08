@@ -25,6 +25,21 @@ pour loueurs de modulaires préfabriqués.
 Le choix automatique s'améliore tout seul : quand vous corrigez un module inconnu,
 la règle est **mémorisée** pour les prochains devis (onglet Modèles → Règles).
 
+## 2 bis. Mode chauffeur (constat sur le terrain)
+
+Sur chaque document généré, le bouton **« Constat »** ouvre le mode chauffeur :
+
+1. **État réel** : remplissez les colonnes *Début de loc* / *Fin de loc* de chaque élément
+   (panneaux, sol, prises…) — l'enregistrement écrit directement dans le document Excel.
+2. **Photos** : prenez les dégâts en photo (bouton fichier = appareil photo sur tablette).
+3. **Signature** : le client signe au doigt ou au stylet dans le cadre blanc, avec son nom.
+4. **PDF** : « Générer le PDF » produit un constat complet (relevés + photos + signature datée).
+5. **Partager** : ouvre un e-mail Outlook prérempli avec le PDF en pièce jointe
+   (à défaut, le dossier du constat s'ouvre pour l'envoyer par un autre moyen).
+
+Les pièces du constat (photos, signature, PDF) sont conservées dans le dossier du document,
+et re-téléchargeables depuis l'Historique.
+
 ## 3. La base de connaissance
 
 - **Clients** : la base apprend chaque client à partir des devis (fiche, interlocuteurs,

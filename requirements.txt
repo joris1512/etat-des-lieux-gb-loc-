@@ -6,6 +6,7 @@ anthropic>=0.40
 pydantic>=2.6
 pydantic-settings>=2.2
 pywebview>=5.0            # application de bureau (fenêtre native) — app_desktop.py
+reportlab>=4.0            # PDF de constat (mode chauffeur) — app/terrain.py
 python-dotenv>=1.0
 PyYAML>=6.0
 pytest>=8.0

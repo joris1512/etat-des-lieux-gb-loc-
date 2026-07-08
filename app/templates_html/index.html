@@ -377,6 +377,42 @@
   </div>
   <div class="toasts" id="toasts"></div>
 
+  <!-- MODE CHAUFFEUR : constat terrain (état réel, photos, signature, PDF, partage) -->
+  <div id="constat-overlay" style="display:none;position:fixed;inset:0;background:rgba(4,8,6,.94);z-index:200;overflow:auto">
+    <div style="max-width:940px;margin:20px auto;padding:0 14px 40px">
+      <div class="card">
+        <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap">
+          <div style="flex:1;min-width:240px"><div class="eyebrow">// MODE CHAUFFEUR</div><h2 id="ct-titre" style="margin:6px 0 0;font-size:19px"></h2></div>
+          <button type="button" class="btn btn-ghost" id="ct-fermer">Fermer</button>
+        </div>
+        <div class="card-h" style="margin-top:18px">Constat — état réel (début / fin de location)</div>
+        <div id="ct-lignes" style="max-height:44vh;overflow:auto"></div>
+        <div class="card-h" style="margin-top:18px">Photos</div>
+        <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap">
+          <input type="file" id="ct-photo" accept="image/jpeg,image/png" capture="environment" multiple style="max-width:320px">
+          <span class="hint">JPEG/PNG · 8 Mo max · prises directement à l'appareil sur tablette</span>
+        </div>
+        <div id="ct-photos" style="display:flex;gap:10px;flex-wrap:wrap;margin-top:10px"></div>
+        <div class="card-h" style="margin-top:18px">Signature du client — « bon pour accord »</div>
+        <div style="display:flex;gap:14px;flex-wrap:wrap;align-items:flex-start">
+          <canvas id="ct-canvas" width="560" height="150" style="background:#fff;border-radius:10px;touch-action:none;border:2px solid var(--bd2)"></canvas>
+          <div style="display:flex;flex-direction:column;gap:10px;min-width:220px">
+            <input id="ct-signataire" placeholder="Nom du signataire">
+            <button type="button" class="btn btn-ghost btn-sm" id="ct-effacer">Effacer la signature</button>
+            <button type="button" class="btn btn-primary" id="ct-signer">Valider la signature</button>
+            <span class="hint" id="ct-signe"></span>
+          </div>
+        </div>
+        <div class="actions" style="margin-top:22px;flex-wrap:wrap">
+          <button type="button" class="btn btn-primary" id="ct-save">Enregistrer le constat</button>
+          <button type="button" class="btn btn-ghost" id="ct-pdf">Générer le PDF</button>
+          <a class="btn btn-ghost" id="ct-voir-pdf" style="display:none" target="_blank">Voir le PDF</a>
+          <button type="button" class="btn btn-red" id="ct-partager">Partager (e-mail)</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
   <script>
     const $=(s,r=document)=>r.querySelector(s);
     const I={
@@ -538,7 +574,7 @@
         ch.generations.forEach(g=>{
           const z=g.zip_nom&&g.job_id?`<a class="dl" style="margin-left:10px" href="/telecharger/${encodeURIComponent(g.job_id)}/${encodeURIComponent(g.zip_nom)}">${I.dl} ZIP</a>`:'';
           docs+=`<div class="grp-t" style="display:flex;align-items:center">${esc(g.offre||'—')} · ${esc(g.horodatage)} · ${g.etats} états ${z}</div>`;
-          g.fichiers.forEach(f=>{nbDocs++;const t=TYPE[f.type_etat]||TYPE.individuel;const url=g.job_id?`/telecharger/${encodeURIComponent(g.job_id)}/${encodeURIComponent(f.nom)}`:null;docs+=`<div class="frow"><div class="fic ${t.ic}">${t.icon}</div><div class="fname">${esc(f.nom)}</div><div class="meta"><span class="tag ${t.ic}">${t.label}</span>${url?`${lienOuvrir(url)}<a class="dl" href="${url}">${I.dl} Télécharger</a>`:'<span class="hint">expiré</span>'}</div></div>`;});
+          g.fichiers.forEach(f=>{nbDocs++;const t=TYPE[f.type_etat]||TYPE.individuel;const url=g.job_id?`/telecharger/${encodeURIComponent(g.job_id)}/${encodeURIComponent(f.nom)}`:null;docs+=`<div class="frow"><div class="fic ${t.ic}">${t.icon}</div><div class="fname">${esc(f.nom)}</div><div class="meta"><span class="tag ${t.ic}">${t.label}</span>${url?`<a class="dl" href="#" data-constat="${url}" title="Mode chauffeur : constat, photos, signature">${I.user} Constat</a>${lienOuvrir(url)}<a class="dl" href="${url}">${I.dl} Télécharger</a>`:'<span class="hint">expiré</span>'}</div></div>`;});
         });
       } else docs='<div class="empty" style="padding:16px"><p>Aucun état des lieux produit pour ce chantier.</p></div>';
       const histo=ch.generations.length?ch.generations.map(g=>`<div class="jrow"><span class="jdot" style="background:var(--green);box-shadow:0 0 8px var(--green-glow)"></span><span class="jl">${g.etats} états générés${g.offre?' · '+esc(g.offre):''}</span><span class="jt">${esc(g.horodatage)}</span></div>`).join(''):'<div class="empty" style="padding:16px"><p>Aucun historique.</p></div>';
@@ -634,7 +670,7 @@
       h+='<div style="margin-left:auto;display:flex;gap:10px;align-items:center">';
       if(data.job_id)h+=`<button type="button" class="btn btn-ghost" data-open="/ouvrir-dossier/${encodeURIComponent(data.job_id)}" title="Ouvrir le dossier des documents">${I.doc} Ouvrir le dossier</button>`;
       if(data.zip)h+=`<a class="btn btn-red" href="${data.zip.url}">${I.dl} Tout télécharger (ZIP)</a>`;h+='</div></div>';
-      for(const k of ['assemble','individuel','sanitaire']){const it=g[k];if(!it.length)continue;const t=TYPE[k];h+=`<div class="grp-t">${t.grp} · ${it.length}</div>`;it.forEach(f=>h+=`<div class="frow"><div class="fic ${t.ic}">${t.icon}</div><div class="fname">${esc(f.nom)}</div><div class="meta"><span class="tag ${t.ic}">${t.label}</span>${lienOuvrir(f.url)}<a class="dl" href="${f.url}">${I.dl} Télécharger</a></div></div>`);}
+      for(const k of ['assemble','individuel','sanitaire']){const it=g[k];if(!it.length)continue;const t=TYPE[k];h+=`<div class="grp-t">${t.grp} · ${it.length}</div>`;it.forEach(f=>h+=`<div class="frow"><div class="fic ${t.ic}">${t.icon}</div><div class="fname">${esc(f.nom)}</div><div class="meta"><span class="tag ${t.ic}">${t.label}</span><a class="dl" href="#" data-constat="${f.url}" title="Mode chauffeur : constat, photos, signature">${I.user} Constat</a>${lienOuvrir(f.url)}<a class="dl" href="${f.url}">${I.dl} Télécharger</a></div></div>`);}
       h+='</div>';
       if(data.avertissements&&data.avertissements.length){h+=`<div class="card" style="margin-top:18px"><div class="alert">${I.alert}<div><div class="at">À vérifier (${data.avertissements.length})</div><ul>`;data.avertissements.forEach(a=>h+=`<li>${esc(a)}</li>`);h+='</ul></div></div></div>';}
       genResult.innerHTML=h;
@@ -662,6 +698,61 @@
       try{const r=await fetch('/correspondances',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({pattern,modele,est_bungalow:bung,categorie:bung?'bungalow':'sanitaire'})});const d=await r.json();if(!r.ok)throw new Error(d.detail||'Erreur');toast('Règle enregistrée.','ok');$('#regle-pattern').value='';$('#regle-bung').checked=false;chargerRegles();}catch(e){toast(e.message,'bad');}}
     async function supprimerRegle(pattern){if(!confirm(`Supprimer la règle « ${pattern} » ?`))return;try{const r=await fetch('/correspondances?pattern='+encodeURIComponent(pattern),{method:'DELETE'});if(!r.ok){const d=await r.json();throw new Error(d.detail||'Erreur');}toast('Règle supprimée.','ok');chargerRegles();}catch(e){toast(e.message,'bad');}}
     $('#btn-regle-add').addEventListener('click',enregistrerRegle);
+
+    /* MODE CHAUFFEUR (constat terrain) */
+    let ctx=null; // {job, nom}
+    const ctUrl=(suffixe='')=>`/terrain/${encodeURIComponent(ctx.job)}/${encodeURIComponent(ctx.nom)}${suffixe}`;
+    function renderConstat(d){
+      $('#ct-titre').textContent=ctx.nom.replace(/\.xlsx$/,'');
+      $('#ct-lignes').innerHTML='<table class="tbl"><thead><tr><th>Élément</th><th>Début de loc</th><th>Fin de loc</th></tr></thead><tbody>'+
+        (d.lignes||[]).map(l=>`<tr><td style="width:38%">${esc(l.libelle)}</td><td><input data-ct-l="${l.ligne}" data-ct-k="debut" value="${esc(l.debut||'')}" style="width:100%"></td><td><input data-ct-l="${l.ligne}" data-ct-k="fin" value="${esc(l.fin||'')}" style="width:100%"></td></tr>`).join('')+'</tbody></table>';
+      $('#ct-photos').innerHTML=(d.photos||[]).map(p=>`<img src="/terrain-fichier/${encodeURIComponent(ctx.job)}/${encodeURIComponent(ctx.nom)}/${encodeURIComponent(p)}" style="height:84px;border-radius:8px;border:1px solid var(--bd2)" title="${esc(p)}">`).join('')||'<span class="hint">aucune photo</span>';
+      $('#ct-signe').textContent=d.signature?`Signé${d.signataire?' par '+d.signataire:''} ✔`:'';
+      if(d.signataire)$('#ct-signataire').value=d.signataire;
+      const pdfBtn=$('#ct-voir-pdf');
+      if(d.pdf){pdfBtn.style.display='';pdfBtn.href=`/terrain-fichier/${encodeURIComponent(ctx.job)}/${encodeURIComponent(ctx.nom)}/constat.pdf`;}else pdfBtn.style.display='none';
+    }
+    async function ouvrirConstat(dlUrl){
+      const m=dlUrl.match(/^\/telecharger\/([^/]+)\/(.+)$/);if(!m)return;
+      ctx={job:decodeURIComponent(m[1]),nom:decodeURIComponent(m[2])};
+      try{const r=await fetch(ctUrl());const d=await r.json();if(!r.ok)throw new Error(d.detail||'Constat indisponible');renderConstat(d);effacerCanvas();$('#constat-overlay').style.display='block';window.scrollTo({top:0});}
+      catch(e){toast(e.message,'bad');}
+    }
+    document.addEventListener('click',e=>{const o=e.target.closest&&e.target.closest('[data-constat]');if(o){e.preventDefault();ouvrirConstat(o.dataset.constat);}});
+    $('#ct-fermer').addEventListener('click',()=>{$('#constat-overlay').style.display='none';});
+    $('#ct-save').addEventListener('click',async()=>{
+      const map={};$('#ct-lignes').querySelectorAll('[data-ct-l]').forEach(i=>{const l=i.dataset.ctL;map[l]=map[l]||{ligne:parseInt(l,10),libelle:'',debut:'',fin:''};map[l][i.dataset.ctK]=i.value;});
+      // récupère les libellés affichés pour le PDF
+      $('#ct-lignes').querySelectorAll('tbody tr').forEach(tr=>{const inp=tr.querySelector('[data-ct-l]');if(inp)map[inp.dataset.ctL].libelle=tr.cells[0].textContent;});
+      try{const r=await fetch(ctUrl(),{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({lignes:Object.values(map)})});const d=await r.json();if(!r.ok)throw new Error(d.detail||'Erreur');toast('Constat enregistré dans le document Excel.','ok');renderConstat(d);}
+      catch(e){toast(e.message,'bad');}
+    });
+    $('#ct-photo').addEventListener('change',async()=>{
+      for(const f of $('#ct-photo').files){const fd=new FormData();fd.append('fichier',f);
+        try{const r=await fetch(ctUrl('/photo'),{method:'POST',body:fd});const d=await r.json();if(!r.ok)throw new Error(d.detail||'Erreur');renderConstat(d);}catch(e){toast(e.message,'bad');}}
+      $('#ct-photo').value='';toast('Photo(s) ajoutée(s).','ok');
+    });
+    /* Canvas de signature (souris + doigt/stylet) */
+    const cv=$('#ct-canvas'),cctx=cv.getContext('2d');let trace=false,vide=true;
+    function effacerCanvas(){cctx.fillStyle='#fff';cctx.fillRect(0,0,cv.width,cv.height);cctx.strokeStyle='#111';cctx.lineWidth=2.2;cctx.lineCap='round';vide=true;}
+    function posCanvas(ev){const r=cv.getBoundingClientRect();return [(ev.clientX-r.left)*cv.width/r.width,(ev.clientY-r.top)*cv.height/r.height];}
+    cv.addEventListener('pointerdown',ev=>{trace=true;vide=false;const[x,y]=posCanvas(ev);cctx.beginPath();cctx.moveTo(x,y);cv.setPointerCapture(ev.pointerId);});
+    cv.addEventListener('pointermove',ev=>{if(!trace)return;const[x,y]=posCanvas(ev);cctx.lineTo(x,y);cctx.stroke();});
+    cv.addEventListener('pointerup',()=>{trace=false;});
+    $('#ct-effacer').addEventListener('click',effacerCanvas);
+    $('#ct-signer').addEventListener('click',async()=>{
+      if(vide){toast('Faites signer dans le cadre blanc.','bad');return;}
+      try{const r=await fetch(ctUrl('/signature'),{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({image:cv.toDataURL('image/png'),signataire:$('#ct-signataire').value})});const d=await r.json();if(!r.ok)throw new Error(d.detail||'Erreur');toast('Signature enregistrée.','ok');renderConstat(d);}
+      catch(e){toast(e.message,'bad');}
+    });
+    $('#ct-pdf').addEventListener('click',async()=>{
+      try{const r=await fetch(ctUrl('/pdf'),{method:'POST'});const d=await r.json();if(!r.ok)throw new Error(d.detail||'Erreur');toast('PDF de constat généré.','ok');renderConstat(d);}
+      catch(e){toast(e.message,'bad');}
+    });
+    $('#ct-partager').addEventListener('click',async()=>{
+      try{const r=await fetch(ctUrl('/partager'),{method:'POST'});const d=await r.json();if(!r.ok)throw new Error(d.detail||'Ouverture impossible');toast(d.mode==='outlook'?'E-mail Outlook prérempli ouvert.':'Dossier du constat ouvert (joignez le PDF).','ok');}
+      catch(e){toast(e.message,'bad');}
+    });
 
     /* MARQUE BLANCHE (nom de société + logo) */
     async function chargerMarque(){try{const p=await(await fetch('/parametres')).json();$('#brand-logo').src=p.logo+'?v='+Date.now();$('#brand-nom').textContent=p.societe||'';const n=$('#soc-nom');if(n&&!n.value)n.value=p.societe||'';}catch(_){}}
