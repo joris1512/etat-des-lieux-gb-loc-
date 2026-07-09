@@ -19,8 +19,9 @@ pour loueurs de modulaires préfabriqués.
    - décochez un module pour l'exclure ; ajustez blocs et quantités de mobilier.
 3. **Générer les états** → chaque document est **pré-rempli** (client, chantier, fonction
    du bungalow cochée, **mobilier du devis reporté tel quel**).
-4. Boutons : **Ouvrir** (directement dans Excel) · **Télécharger** · **Ouvrir le dossier** ·
-   **Tout télécharger (ZIP)**.
+4. Boutons sur chaque état : **Constat** (mode chauffeur) · **Ouvrir** (dans Excel) ·
+   **Imprimer** (imprimante par défaut, sans ouvrir Excel) · **Télécharger**. Plus, pour le lot :
+   **Ouvrir le dossier** · **Tout télécharger (ZIP)**.
 
 Le choix automatique s'améliore tout seul : quand vous corrigez un module inconnu,
 la règle est **mémorisée** pour les prochains devis (onglet Modèles → Règles).

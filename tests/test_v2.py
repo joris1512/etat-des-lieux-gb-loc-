@@ -114,6 +114,26 @@ def test_ouvrir_lance_le_fichier_en_local(monkeypatch):
     assert ouverts[1].endswith(job_dir.name)
 
 
+def test_imprimer_refuse_hors_poste_local():
+    assert TestClient(app).post("/imprimer/abc/x.xlsx").status_code == 403
+
+
+def test_imprimer_utilise_le_verbe_print_en_local(monkeypatch):
+    from types import SimpleNamespace
+
+    import app.main as main_mod
+    from app.generation import generer
+
+    rapport, job_dir = generer(None, utiliser_fixture=True)
+    monkeypatch.setattr(main_mod, "SORTIES_DIR", job_dir.parent)
+    appels: list[tuple] = []
+    monkeypatch.setattr(main_mod.os, "startfile", lambda p, verbe=None: appels.append((p, verbe)), raising=False)
+    req = SimpleNamespace(client=SimpleNamespace(host="127.0.0.1"), state=SimpleNamespace(role="admin", utilisateur="gb"))
+
+    main_mod.imprimer_fichier(job_dir.name, rapport.fichiers[0], req)
+    assert appels and appels[0][0].endswith(rapport.fichiers[0]) and appels[0][1] == "print"
+
+
 def test_sauvegarde_quotidienne(tmp_path, monkeypatch):
     monkeypatch.setattr(sauvegarde, "DOSSIER", tmp_path / "sauvegardes")
     db.init_db()  # crée la base isolée du test

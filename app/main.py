@@ -680,6 +680,22 @@ def ouvrir_fichier(job_id: str, nom: str, request: Request) -> dict:
     return {"ok": True}
 
 
+@app.post("/imprimer/{job_id}/{nom}")
+def imprimer_fichier(job_id: str, nom: str, request: Request) -> dict:
+    """Imprime le document sur l'imprimante par défaut (verbe d'impression Windows, poste local)."""
+    _exiger_poste_local(request)
+    cible = _fichier_du_job(job_id, nom)
+    try:
+        os.startfile(str(cible), "print")  # noqa: S606 — chemin validé par _fichier_du_job
+    except OSError as exc:
+        raise HTTPException(
+            status_code=400,
+            detail="Impression directe indisponible sur ce poste — ouvrez le document et imprimez depuis Excel.",
+        ) from exc
+    logger.info("AUDIT impression : %s (%s) par %s", nom, job_id, utilisateur_courant(request))
+    return {"ok": True}
+
+
 @app.post("/ouvrir-dossier/{job_id}")
 def ouvrir_dossier(job_id: str, request: Request) -> dict:
     """Ouvre le dossier des documents générés dans l'explorateur (poste local uniquement)."""
