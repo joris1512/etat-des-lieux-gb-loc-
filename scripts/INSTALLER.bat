@@ -55,7 +55,7 @@ if not exist "%DST%\_internal\.env" (
 echo Icone Bureau + demarrage automatique...
 powershell -NoProfile -Command ^
   "$ws = New-Object -ComObject WScript.Shell;" ^
-  "$l = $ws.CreateShortcut([Environment]::GetFolderPath('Desktop') + '\GB Etats des lieux.lnk');" ^
+  "$l = $ws.CreateShortcut([Environment]::GetFolderPath('Desktop') + '\Application Etat des lieux.lnk');" ^
   "$l.TargetPath = '%DST%\GB Etats des lieux.exe'; $l.WorkingDirectory = '%DST%'; $l.Save();" ^
   "$v = 'Set sh = CreateObject(\"WScript.Shell\")' + [Environment]::NewLine + 'sh.Environment(\"PROCESS\")(\"GB_SERVEUR\") = \"1\"' + [Environment]::NewLine + 'sh.Environment(\"PROCESS\")(\"GB_PASSWORD\") = \"\"' + [Environment]::NewLine + 'sh.Run \"\"\"%DST%\GB Etats des lieux.exe\"\"\", 0, False';" ^
   "Set-Content -Path ([Environment]::GetFolderPath('Startup') + '\GB Etats des lieux (serveur).vbs') -Value $v -Encoding ASCII"
