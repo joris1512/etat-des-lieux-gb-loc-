@@ -134,6 +134,28 @@ def test_imprimer_utilise_le_verbe_print_en_local(monkeypatch):
     assert appels and appels[0][0].endswith(rapport.fichiers[0]) and appels[0][1] == "print"
 
 
+def test_migration_donnees_hors_programme(tmp_path):
+    """Les données d'une ancienne installation sont déplacées vers le dossier protégé,
+    sans jamais écraser des données déjà présentes (réinstallation ≠ perte de données)."""
+    from app.main import migrer_donnees_programme
+
+    racine = tmp_path / "programme"
+    donnees = tmp_path / "donnees"
+    (racine / "runtime").mkdir(parents=True)
+    (racine / "runtime" / "gb.db").write_text("ancienne base")
+    (racine / ".env").write_text("ANTHROPIC_API_KEY=cle-migree")
+
+    migrer_donnees_programme(racine=racine, donnees=donnees, runtime=donnees / "runtime")
+    assert (donnees / "runtime" / "gb.db").read_text() == "ancienne base"
+    assert "cle-migree" in (donnees / ".env").read_text()
+
+    # Une nouvelle installation (programme vierge) ne touche PAS aux données migrées.
+    (donnees / "runtime" / "gb.db").write_text("base vivante")
+    (racine / "runtime" / "gb.db").write_text("base du vieux programme")
+    migrer_donnees_programme(racine=racine, donnees=donnees, runtime=donnees / "runtime")
+    assert (donnees / "runtime" / "gb.db").read_text() == "base vivante"
+
+
 def test_sauvegarde_quotidienne(tmp_path, monkeypatch):
     monkeypatch.setattr(sauvegarde, "DOSSIER", tmp_path / "sauvegardes")
     db.init_db()  # crée la base isolée du test

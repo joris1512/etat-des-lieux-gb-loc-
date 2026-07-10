@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 import sys
 from functools import lru_cache
 from pathlib import Path
@@ -18,14 +19,18 @@ if getattr(sys, "frozen", False):
     # PyInstaller --onedir : les données livrées (--add-data) sont dans le dossier `_internal`
     # exposé via sys._MEIPASS ; ce dossier est réel et modifiable (règles, modèles, runtime).
     RACINE = Path(getattr(sys, "_MEIPASS", Path(sys.executable).resolve().parent))
+    # ⚠️ LES DONNÉES (base clients, documents, clé API) vivent HORS du dossier programme :
+    # une réinstallation / mise à jour ne peut ainsi JAMAIS les toucher.
+    DONNEES_DIR = Path(os.environ.get("LOCALAPPDATA") or str(RACINE)) / "GB Etats des lieux - donnees"
 else:
     RACINE = Path(__file__).resolve().parents[1]
+    DONNEES_DIR = RACINE
 
 TEMPLATES_DIR = RACINE / "templates"
 CONFIG_CELLULES = RACINE / "config" / "cellules.yaml"
 CORRESPONDANCES_CSV = RACINE / "correspondances.csv"
 FIXTURES_DIR = RACINE / "fixtures"
-RUNTIME_DIR = RACINE / "runtime"
+RUNTIME_DIR = DONNEES_DIR / "runtime"
 SORTIES_DIR = RUNTIME_DIR / "sorties"
 HTML_DIR = RACINE / "app" / "templates_html"
 STATIC_DIR = RACINE / "app" / "static"
@@ -61,7 +66,9 @@ class Reglages(BaseSettings):
         return texte or None
 
     model_config = SettingsConfigDict(
-        env_file=str(RACINE / ".env"),
+        # Le .env du dossier de DONNÉES (dernier de la liste) prime sur celui du programme :
+        # la clé API survit ainsi aux réinstallations.
+        env_file=(str(RACINE / ".env"), str(DONNEES_DIR / ".env")),
         env_file_encoding="utf-8",
         extra="ignore",
     )

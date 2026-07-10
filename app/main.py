@@ -15,7 +15,16 @@ from fastapi.staticfiles import StaticFiles
 
 from app import db, import_csv, terrain
 from app.assemblage import construire_plan, resoudre_modele
-from app.config import HTML_DIR, SORTIES_DIR, STATIC_DIR, VERSION, get_reglages
+from app.config import (
+    DONNEES_DIR,
+    HTML_DIR,
+    RACINE,
+    RUNTIME_DIR,
+    SORTIES_DIR,
+    STATIC_DIR,
+    VERSION,
+    get_reglages,
+)
 from app.sauvegarde import sauvegarder_quotidienne
 from app.correspondance import (
     ajouter_ou_modifier_regle,
@@ -38,9 +47,30 @@ from app.securite import (
 
 logger = logging.getLogger("uvicorn.error")
 
+def migrer_donnees_programme(racine=None, donnees=None, runtime=None) -> None:
+    """Récupère les données d'une ANCIENNE installation (stockées dans le dossier programme)
+    vers le dossier de données séparé — sans jamais écraser des données déjà migrées."""
+    racine, donnees, runtime = racine or RACINE, donnees or DONNEES_DIR, runtime or RUNTIME_DIR
+    if donnees == racine:  # mode développement : rien à migrer
+        return
+    donnees.mkdir(parents=True, exist_ok=True)
+    ancien_runtime = racine / "runtime"
+    if ancien_runtime.is_dir() and not runtime.exists():
+        shutil.copytree(ancien_runtime, runtime)
+        logger.info("Données migrées vers le dossier protégé : %s", runtime)
+    ancien_env = racine / ".env"
+    if ancien_env.is_file() and not (donnees / ".env").exists():
+        shutil.copy2(ancien_env, donnees / ".env")
+        logger.info("Clé API migrée vers le dossier protégé : %s", donnees)
+
+
 @asynccontextmanager
 async def _lifespan(_app: FastAPI):
-    # Base de connaissance + purge des anciennes sorties + sauvegarde quotidienne au démarrage.
+    # Migration éventuelle d'une ancienne installation, puis base + purge + sauvegarde du jour.
+    try:
+        migrer_donnees_programme()
+    except Exception as exc:  # noqa: BLE001 — une migration impossible ne doit pas bloquer l'app
+        logger.warning("Migration des données impossible : %s", exc)
     db.init_db()
     purger_anciennes_sorties()
     try:

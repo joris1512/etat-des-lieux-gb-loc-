@@ -18,6 +18,7 @@ if not exist "%SRC%\GB Etats des lieux.exe" (
 
 echo Fermeture de l'application si ouverte...
 taskkill /im "GB Etats des lieux.exe" /f >nul 2>&1
+timeout /t 3 /nobreak >nul
 
 echo Preservation des donnees et de la cle...
 if exist "%SAUVE%" rd /s /q "%SAUVE%"
@@ -29,6 +30,10 @@ if exist "%DST%\_internal\app\static\logo_client.png" copy /y "%DST%\_internal\a
 echo Installation de la nouvelle version...
 if exist "%DST%" rd /s /q "%DST%"
 xcopy /e /i /q "%SRC%" "%DST%" >nul
+if not exist "%DST%\GB Etats des lieux.exe" (
+  echo [ERREUR] Copie incomplete - fermez toute instance et relancez ce script.
+  pause & exit /b 1
+)
 
 echo Restauration des donnees et de la cle...
 if exist "%SAUVE%\runtime" xcopy /e /i /q "%SAUVE%\runtime" "%DST%\_internal\runtime" >nul

@@ -17,6 +17,7 @@ if not exist "%SRC%\GB Etats des lieux.exe" (
 
 echo Fermeture d'une eventuelle instance...
 taskkill /im "GB Etats des lieux.exe" /f >nul 2>&1
+timeout /t 3 /nobreak >nul
 
 if exist "%DST%\_internal\runtime" (
   echo Mise a jour : donnees et cle existantes PRESERVEES.
@@ -31,6 +32,10 @@ if exist "%DST%\_internal\runtime" (
 echo Installation...
 if exist "%DST%" rd /s /q "%DST%"
 xcopy /e /i /q "%SRC%" "%DST%" >nul
+if not exist "%DST%\GB Etats des lieux.exe" (
+  echo [ERREUR] Copie incomplete - fermez toute instance et relancez ce script.
+  pause & exit /b 1
+)
 
 if defined MAJ (
   if exist "%TEMP%\gb_install_sauve\runtime" xcopy /e /i /q "%TEMP%\gb_install_sauve\runtime" "%DST%\_internal\runtime" >nul
