@@ -137,8 +137,13 @@ app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")
 
 
 @app.get("/", response_class=HTMLResponse)
-def accueil() -> str:
-    return (HTML_DIR / "index.html").read_text(encoding="utf-8")
+def accueil() -> HTMLResponse:
+    # no-store : la fenêtre de l'application recharge TOUJOURS l'interface à jour
+    # (sinon WebView2 peut servir une vieille version en cache après une mise à jour).
+    return HTMLResponse(
+        (HTML_DIR / "index.html").read_text(encoding="utf-8"),
+        headers={"Cache-Control": "no-store, must-revalidate"},
+    )
 
 
 def _reponse_generation(rapport, job_dir: Path) -> dict:
