@@ -19,7 +19,9 @@ import time
 from pathlib import Path
 
 HOTE = "127.0.0.1"
-PORT = int(os.environ.get("GB_PORT", "8000"))
+# Port DÉDIÉ à l'application de bureau (≠ 8000) : d'anciennes installations qui traînent et
+# se lancent au démarrage ne peuvent plus squatter le port et « voler » la fenêtre.
+PORT = int(os.environ.get("GB_PORT", "8742"))
 
 
 def _journaliser_erreur(exc: BaseException) -> None:
