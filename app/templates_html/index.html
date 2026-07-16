@@ -248,6 +248,80 @@
       .brand{padding:14px;} .nav{flex-direction:row;padding:10px;} .nav-lbl,.side-foot{display:none;}
       .nav-item{width:auto;} .nav-item.active::before{display:none;} .grid4{grid-template-columns:repeat(2,1fr);} .row2,.clist{grid-template-columns:1fr;} .main{padding:22px 16px 50px;} h1.title{font-size:32px;}
     }
+
+    /* ================= COUCHE DE MOUVEMENT — « fluidité magique » ================= */
+    html{scroll-behavior:smooth;}
+
+    /* Fond vivant : deux halos qui dérivent lentement (transform uniquement = fluide) */
+    body::before, body::after{
+      content:'';position:fixed;z-index:-1;border-radius:50%;filter:blur(70px);
+      pointer-events:none;will-change:transform;
+    }
+    body::before{width:560px;height:560px;left:-160px;top:8%;
+      background:radial-gradient(circle, rgba(49,233,129,.13), transparent 65%);
+      animation:derive1 26s ease-in-out infinite alternate;}
+    body::after{width:640px;height:640px;right:-200px;top:45%;
+      background:radial-gradient(circle, rgba(39,216,206,.11), transparent 65%);
+      animation:derive2 32s ease-in-out infinite alternate;}
+    @keyframes derive1{from{transform:translate(0,0) scale(1);}to{transform:translate(140px,110px) scale(1.15);}}
+    @keyframes derive2{from{transform:translate(0,0) scale(1.1);}to{transform:translate(-160px,-120px) scale(.95);}}
+
+    /* Changement de vue : glissement élastique */
+    .view.active{animation:vue .55s cubic-bezier(.16,1,.3,1);}
+    @keyframes vue{from{opacity:0;transform:translateY(26px) scale(.985);}}
+
+    /* Entrée en CASCADE des modules (cartes, KPI, fiches clients, lignes de fichiers) */
+    @keyframes montee{from{opacity:0;transform:translateY(22px);}}
+    .view.active .card{animation:montee .6s cubic-bezier(.16,1,.3,1) backwards;}
+    .view.active .card:nth-of-type(2){animation-delay:.07s;}
+    .view.active .card:nth-of-type(3){animation-delay:.14s;}
+    .view.active .card:nth-of-type(4){animation-delay:.21s;}
+    .view.active .kpi{animation:montee .6s cubic-bezier(.16,1,.3,1) backwards;}
+    .view.active .kpi:nth-child(1){animation-delay:.05s;}
+    .view.active .kpi:nth-child(2){animation-delay:.12s;}
+    .view.active .kpi:nth-child(3){animation-delay:.19s;}
+    .view.active .kpi:nth-child(4){animation-delay:.26s;}
+    .clist .ccard{animation:montee .55s cubic-bezier(.16,1,.3,1) backwards;}
+    .clist .ccard:nth-child(2){animation-delay:.06s;}
+    .clist .ccard:nth-child(3){animation-delay:.12s;}
+    .clist .ccard:nth-child(4){animation-delay:.18s;}
+    .clist .ccard:nth-child(5){animation-delay:.24s;}
+    .clist .ccard:nth-child(6){animation-delay:.3s;}
+    .frow{animation:montee .5s cubic-bezier(.16,1,.3,1) backwards;}
+    .frow:nth-child(2){animation-delay:.05s;} .frow:nth-child(3){animation-delay:.1s;}
+    .frow:nth-child(4){animation-delay:.15s;} .frow:nth-child(5){animation-delay:.2s;}
+    .frow:nth-child(6){animation-delay:.25s;} .frow:nth-child(7){animation-delay:.3s;}
+    .mrow{animation:montee .45s cubic-bezier(.16,1,.3,1) backwards;}
+    .mrow:nth-child(2){animation-delay:.04s;} .mrow:nth-child(3){animation-delay:.08s;}
+    .mrow:nth-child(4){animation-delay:.12s;} .mrow:nth-child(5){animation-delay:.16s;}
+
+    /* Gros chiffres : petit « pop » d'arrivée */
+    .kpi .num, .summary .big{animation:pop .7s cubic-bezier(.16,1,.3,1) backwards;animation-delay:.25s;}
+    @keyframes pop{0%{opacity:0;transform:scale(.85);}60%{transform:scale(1.04);}100%{opacity:1;transform:scale(1);}}
+
+    /* Barres de graphiques : elles POUSSENT depuis zéro */
+    .cbar{animation:pousse .8s cubic-bezier(.16,1,.3,1) backwards;transform-origin:bottom;}
+    @keyframes pousse{from{transform:scaleY(0);}}
+    .cbars .cbar:nth-child(odd){animation-delay:.08s;} .cbars .cbar:nth-child(even){animation-delay:.16s;}
+
+    /* Boutons : réponse tactile */
+    .btn:not(:disabled):active{transform:scale(.96) !important;transition-duration:.06s;}
+    .dl:active,.nav-item:active{transform:scale(.96);}
+
+    /* Menu : la sélection glisse */
+    .nav-item{transition:all .22s cubic-bezier(.16,1,.3,1);}
+
+    /* Donut : rotation d'arrivée */
+    .donut svg{animation:tourne 1s cubic-bezier(.16,1,.3,1) backwards;}
+    @keyframes tourne{from{transform:rotate(-210deg);opacity:0;}to{transform:rotate(-90deg);opacity:1;}}
+
+    /* Overlay mode chauffeur : montée douce */
+    #constat-overlay > div{animation:vue .45s cubic-bezier(.16,1,.3,1);}
+
+    /* Respect de l'accessibilité : pas d'animations si l'utilisateur les refuse */
+    @media (prefers-reduced-motion: reduce){
+      *,*::before,*::after{animation:none !important;transition:none !important;}
+    }
   </style>
 </head>
 <body>
