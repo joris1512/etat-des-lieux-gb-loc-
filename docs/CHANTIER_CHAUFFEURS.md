@@ -1,5 +1,9 @@
 # Chantier « Espace chauffeurs » — plan technique (2026-07-17)
 
+> **✅ LIVRÉ le 17/07/2026 en v2.4.0** (commit « Espace chauffeurs »). 128 tests verts,
+> ruff clean, exe reconstruit et déployé dans `P:\Joris\APPLICATION FINALE - Etat des lieux`.
+> Ce document reste comme référence de conception.
+
 Demande utilisateur : (1) un espace chauffeur dédié où ils n'ont accès QU'AUX constats,
 (2) signature électronique complète — y compris INSÉRÉE dans le document Excel,
 (3) accès depuis leur téléphone (pratique, installable).

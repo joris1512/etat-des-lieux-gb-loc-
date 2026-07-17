@@ -17,6 +17,7 @@ cd /d "%~dp0"
  --collect-all uvicorn ^
  --collect-all anthropic ^
  --collect-all reportlab ^
+ --collect-all qrcode ^
  --hidden-import app.main ^
  "app_desktop.py"
 REM (Les donnees et la cle API vivent desormais HORS du programme : rien a recopier ici.)
