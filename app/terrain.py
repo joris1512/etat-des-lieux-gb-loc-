@@ -116,10 +116,33 @@ def ajouter_photo(dossier: Path, contenu: bytes) -> str:
     return nom
 
 
-def enregistrer_signature(dossier: Path, png: bytes, signataire: str) -> None:
+def _ancre_signature(document: Path, feuille: str | None) -> str | None:
+    """Cellule sous la zone « Date, Nom et Signature » côté client (colonne E des modèles)."""
+    wb = load_workbook(document, data_only=True)
+    ws = wb[feuille] if feuille and feuille in wb.sheetnames else wb[wb.sheetnames[0]]
+    ancre = None
+    for row in ws.iter_rows(max_col=8):
+        for c in row:
+            if isinstance(c.value, str) and "Signature" in c.value and "mention" not in c.value:
+                ancre = f"{c.column_letter}{c.row + 1}"  # juste sous le libellé
+    wb.close()
+    return ancre
+
+
+def enregistrer_signature(
+    dossier: Path, png: bytes, signataire: str, document: Path | None = None
+) -> None:
     if not png.startswith(b"\x89PNG\r\n\x1a\n"):
         raise ValueError("Signature invalide.")
     (dossier / "signature.png").write_bytes(png)
+    # Insère aussi la signature DANS le document Excel (zone « Date, Nom et Signature »).
+    if document is not None and document.exists():
+        try:
+            ancre = _ancre_signature(document, None)
+            if ancre:
+                patch_xlsx.inserer_image(document, None, ancre, png)
+        except Exception:  # noqa: BLE001 — l'insertion Excel ne doit pas bloquer la signature
+            pass
     js = _chemin_json(dossier)
     data = json.loads(js.read_text(encoding="utf-8")) if js.exists() else {}
     data["signataire"] = (signataire or "").strip()

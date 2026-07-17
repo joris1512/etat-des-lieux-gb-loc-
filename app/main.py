@@ -10,7 +10,7 @@ from contextlib import asynccontextmanager
 from pathlib import Path
 
 from fastapi import Depends, FastAPI, File, Form, HTTPException, Request, UploadFile
-from fastapi.responses import FileResponse, HTMLResponse, JSONResponse
+from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, Response
 from fastapi.staticfiles import StaticFiles
 
 from app import db, import_csv, terrain
@@ -571,6 +571,78 @@ def _fichier_du_job(job_id: str, nom: str) -> Path:
     return cible
 
 
+@app.get("/constats")
+def constats_lister() -> dict:
+    """Dossiers récents et leurs documents Excel — l'espace des chauffeurs."""
+    return {"dossiers": db.lister_constats()}
+
+
+@app.get("/manifest.json")
+def manifest_pwa() -> JSONResponse:
+    """Manifeste PWA : « Ajouter à l'écran d'accueil » sur téléphone = icône type application."""
+    societe = db.lire_parametre("societe", "") or "Etat des lieux"
+    return JSONResponse({
+        "name": f"Etats des lieux — {societe}",
+        "short_name": "Etats des lieux",
+        "start_url": "/",
+        "display": "standalone",
+        "background_color": "#060a12",
+        "theme_color": "#0E1A14",
+        "icons": [{"src": "/static/logo.png", "sizes": "512x512", "type": "image/png", "purpose": "any"}],
+    })
+
+
+@app.get("/mobile-infos")
+def mobile_infos(request: Request) -> dict:
+    """Infos de connexion mobile (admin) : état du réglage, adresses du poste, port."""
+    exiger_admin(request)
+    import socket
+
+    adresses = []
+    try:
+        for info in socket.getaddrinfo(socket.gethostname(), None, socket.AF_INET):
+            ip = info[4][0]
+            if not ip.startswith("127.") and ip not in adresses:
+                adresses.append(ip)
+    except OSError:
+        pass
+    return {
+        "actif": (db.lire_parametre("acces_mobile", "0") == "1"),
+        "adresses": adresses,
+        "port": 8742,
+    }
+
+
+@app.post("/mobile-acces")
+async def mobile_acces(request: Request, corps: dict) -> dict:
+    """Active/désactive l'accès depuis les téléphones du réseau (redémarrage requis)."""
+    exiger_admin(request)
+    db.ecrire_parametre("acces_mobile", "1" if corps.get("actif") else "0")
+    logger.info("AUDIT accès mobile = %s par %s", corps.get("actif"), utilisateur_courant(request))
+    return {"actif": (db.lire_parametre("acces_mobile", "0") == "1"), "redemarrage_requis": True}
+
+
+@app.get("/mobile-qr")
+def mobile_qr(request: Request) -> Response:
+    """QR code (SVG) de l'adresse à ouvrir sur le téléphone — admin uniquement."""
+    exiger_admin(request)
+    infos = mobile_infos(request)
+    if not infos["adresses"]:
+        raise HTTPException(status_code=404, detail="Adresse réseau introuvable.")
+    import io
+
+    import qrcode
+    import qrcode.image.svg
+
+    img = qrcode.make(
+        f"http://{infos['adresses'][0]}:{infos['port']}",
+        image_factory=qrcode.image.svg.SvgPathImage,
+    )
+    tampon = io.BytesIO()
+    img.save(tampon)
+    return Response(content=tampon.getvalue(), media_type="image/svg+xml")
+
+
 # --------------------------------------------------------------------------- #
 # Mode chauffeur (terrain) : constat début/fin, photos, signature, PDF, partage
 # --------------------------------------------------------------------------- #
@@ -623,7 +695,7 @@ async def constat_signature(job_id: str, nom: str, corps: dict) -> dict:
 
     try:
         png = base64.b64decode(image[len(prefixe):])
-        terrain.enregistrer_signature(dossier, png, corps.get("signataire") or "")
+        terrain.enregistrer_signature(dossier, png, corps.get("signataire") or "", document=document)
     except Exception as exc:  # noqa: BLE001
         raise HTTPException(status_code=400, detail=f"Signature illisible : {exc}") from exc
     logger.info("AUDIT constat signé : %s (%s)", nom, job_id)

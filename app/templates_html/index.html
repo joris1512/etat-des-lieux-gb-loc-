@@ -5,6 +5,9 @@
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>GB Location — Cockpit états des lieux</title>
   <link rel="icon" href="/static/logo.png" />
+  <link rel="manifest" href="/manifest.json" />
+  <link rel="apple-touch-icon" href="/static/logo.png" />
+  <meta name="theme-color" content="#0E1A14" />
   <style>
     :root {
       --bg:#060a12; --bg2:#0a1018; --surface:rgba(22,32,38,.66); --surface2:rgba(30,44,50,.8);
@@ -461,6 +464,12 @@
         </div>
       </section>
 
+      <!-- ESPACE CHAUFFEUR -->
+      <section class="view" id="view-chauffeur">
+        <div class="page-head" style="margin-bottom:22px"><div class="eyebrow">// TERRAIN</div><h1 class="title">Mes constats</h1><p class="subtitle">Choisissez le document, remplissez le constat, faites signer, envoyez.</p></div>
+        <div id="chauffeur-liste"><div class="card"><div class="empty"><p>Chargement…</p></div></div></div>
+      </section>
+
       <!-- UTILISATEURS -->
       <section class="view" id="view-utilisateurs">
         <div class="page-head" style="margin-bottom:22px"><div class="eyebrow">// ADMINISTRATION</div><h1 class="title">Administration</h1><p class="subtitle">Société, marque et comptes utilisateurs — réservé aux administrateurs.</p></div>
@@ -474,12 +483,21 @@
           </div>
         </div>
         <div class="card" style="margin-bottom:18px">
+          <div class="card-h">Accès téléphone (chauffeurs)</div>
+          <p class="hint" style="margin:0 0 12px">Autorise les téléphones du réseau de la société à ouvrir l'application (comptes chauffeurs requis). Sur le téléphone : ouvrir l'adresse ci-dessous puis « Ajouter à l'écran d'accueil ».</p>
+          <div style="display:flex;gap:14px;align-items:center;flex-wrap:wrap">
+            <button type="button" class="btn btn-primary" id="mob-toggle">…</button>
+            <div id="mob-infos" class="hint"></div>
+          </div>
+          <div id="mob-qr" style="margin-top:12px"></div>
+        </div>
+        <div class="card" style="margin-bottom:18px">
           <div class="card-h">Ajouter un compte</div>
           <div class="fgrid" style="align-items:end">
             <div class="field"><label>Identifiant</label><input id="u-id" placeholder="ex. j.dupont" autocomplete="off"></div>
             <div class="field"><label>Nom affiché</label><input id="u-nom" placeholder="ex. Jean Dupont"></div>
             <div class="field"><label>Mot de passe (8 car. min)</label><input id="u-mdp" type="password" autocomplete="new-password"></div>
-            <div class="field" style="max-width:160px"><label>Rôle</label><select id="u-role" style="height:38px;background:var(--surface);color:var(--ink);border:1px solid var(--bd2);border-radius:var(--rc);padding:0 10px"><option value="utilisateur">utilisateur</option><option value="admin">admin</option></select></div>
+            <div class="field" style="max-width:160px"><label>Rôle</label><select id="u-role" style="height:38px;background:var(--surface);color:var(--ink);border:1px solid var(--bd2);border-radius:var(--rc);padding:0 10px"><option value="utilisateur">utilisateur</option><option value="admin">admin</option><option value="chauffeur">chauffeur</option></select></div>
             <button type="button" class="btn btn-primary" id="u-add">Créer le compte</button>
           </div>
         </div>
@@ -555,7 +573,7 @@
       document.querySelectorAll('.nav-item[data-view]').forEach(x=>x.classList.toggle('active',x.dataset.view===v));
       document.querySelectorAll('.view').forEach(s=>s.classList.remove('active'));
       $('#view-'+v).classList.add('active');
-      ({dashboard:chargerDashboard,modeles:chargerModeles,historique:()=>chargerHistorique(),clients:chargerClients,statistiques:chargerStats,utilisateurs:chargerUtilisateurs}[v]||(()=>{}))();
+      ({dashboard:chargerDashboard,modeles:chargerModeles,historique:()=>chargerHistorique(),clients:chargerClients,statistiques:chargerStats,utilisateurs:()=>{chargerUtilisateurs();chargerMobile();},chauffeur:chargerChauffeur}[v]||(()=>{}))();
     }
     document.querySelectorAll('.nav-item[data-view]').forEach(b=>b.addEventListener('click',()=>goto(b.dataset.view)));
     document.querySelectorAll('[data-goto]').forEach(b=>b.addEventListener('click',()=>goto(b.dataset.goto)));
@@ -869,11 +887,55 @@
       catch(e){toast(e.message,'bad');}
     });
 
+    /* ESPACE CHAUFFEUR : liste des dossiers -> documents -> bouton Constat */
+    async function chargerChauffeur(){
+      const box=$('#chauffeur-liste');
+      let d;try{d=await(await fetch('/constats')).json();}catch(_){box.innerHTML='<div class="card"><div class="empty"><p>Chargement impossible.</p></div></div>';return;}
+      if(!d.dossiers.length){box.innerHTML='<div class="card"><div class="empty"><p>Aucun dossier pour le moment. Les documents générés au bureau apparaîtront ici.</p></div></div>';return;}
+      box.innerHTML=d.dossiers.map(g=>{
+        const docs=g.fichiers.map(f=>{const url=`/telecharger/${encodeURIComponent(g.job_id)}/${encodeURIComponent(f.nom)}`;
+          return `<div class="frow"><div class="fic individuel">${I.doc}</div><div class="fname">${esc(f.nom)}</div><div class="meta"><a class="dl" href="#" data-constat="${url}">${I.user} Constat</a></div></div>`;}).join('');
+        return `<div class="card"><div class="card-h">${esc(g.client||'—')} · ${esc(g.chantier||'')} <span style="margin-left:auto;font-weight:400;text-transform:none;letter-spacing:0">${esc(g.horodatage||'')}</span></div>${docs||'<div class="empty"><p>Aucun document.</p></div>'}</div>`;
+      }).join('');
+    }
+    function modeChauffeur(){
+      document.querySelectorAll('.nav-item[data-view]').forEach(b=>{b.style.display='none';});
+      const lbls=document.querySelectorAll('.nav-lbl');lbls.forEach(l=>l.style.display='none');
+      const nav=document.querySelector('.nav');
+      const btn=document.createElement('button');btn.className='nav-item active';btn.innerHTML=I.user+' Mes constats';
+      btn.addEventListener('click',()=>{goto('chauffeur');btn.classList.add('active');});
+      nav.prepend(btn);
+      goto('chauffeur');
+    }
+
     /* MARQUE BLANCHE (nom de société + logo) */
     async function chargerMarque(){try{const p=await(await fetch('/parametres')).json();$('#brand-logo').src=p.logo+'?v='+Date.now();$('#brand-nom').textContent=p.societe||'';const n=$('#soc-nom');if(n&&!n.value)n.value=p.societe||'';}catch(_){}}
     $('#soc-save').addEventListener('click',async()=>{try{const r=await fetch('/parametres',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({societe:$('#soc-nom').value})});const d=await r.json();if(!r.ok)throw new Error(d.detail||'Erreur');toast('Nom de société enregistré.','ok');chargerMarque();}catch(e){toast(e.message,'bad');}});
     $('#soc-logo').addEventListener('change',async()=>{const f=$('#soc-logo').files[0];if(!f)return;const fd=new FormData();fd.append('fichier',f);try{const r=await fetch('/parametres/logo',{method:'POST',body:fd});const d=await r.json();if(!r.ok)throw new Error(d.detail||'Erreur');toast('Logo remplacé.','ok');$('#soc-logo').value='';chargerMarque();}catch(e){toast(e.message,'bad');}});
     $('#soc-logo-defaut').addEventListener('click',async()=>{try{const r=await fetch('/parametres/logo',{method:'DELETE'});if(!r.ok){const d=await r.json();throw new Error(d.detail||'Erreur');}toast('Logo par défaut restauré.','ok');chargerMarque();}catch(e){toast(e.message,'bad');}});
+
+    /* ACCÈS TÉLÉPHONE (administration) */
+    async function chargerMobile(){
+      const btn=$('#mob-toggle'),infos=$('#mob-infos'),qr=$('#mob-qr');if(!btn)return;
+      try{
+        const d=await(await fetch('/mobile-infos')).json();
+        btn.textContent=d.actif?'Désactiver l\'accès téléphone':'Activer l\'accès téléphone';
+        btn.dataset.actif=d.actif?'1':'0';
+        if(d.actif&&d.adresses.length){
+          infos.innerHTML='Adresse à ouvrir sur le téléphone : '+d.adresses.map(a=>`<strong>http://${a}:${d.port}</strong>`).join(' ou ');
+          qr.innerHTML=`<img src="/mobile-qr" alt="QR code" style="width:170px;height:170px;border-radius:14px;background:#fff;padding:10px">`;
+        }else{infos.textContent=d.actif?'Accès activé — adresse réseau introuvable.':'Accès désactivé : l\'application n\'est joignable que sur ce poste.';qr.innerHTML='';}
+      }catch(_){infos.textContent='';}
+    }
+    $('#mob-toggle').addEventListener('click',async()=>{
+      const btn=$('#mob-toggle');
+      try{
+        const r=await fetch('/mobile-acces',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({actif:btn.dataset.actif!=='1'})});
+        const d=await r.json();if(!r.ok)throw new Error(d.detail||'Erreur');
+        toast(d.redemarrage_requis?'Réglage enregistré — fermez puis rouvrez l\'application pour l\'appliquer.':'Réglage enregistré.','ok');
+        chargerMobile();
+      }catch(e){toast(e.message,'bad');}
+    });
 
     /* UTILISATEURS (administration) */
     function rendreUtilisateurs(liste){
@@ -881,7 +943,7 @@
       if(!liste.length){box.innerHTML='<div class="empty"><p>Aucun compte : l\'application fonctionne en accès libre sur ce poste. Créez un compte « admin » pour activer la connexion.</p></div>';return;}
       box.innerHTML=liste.map(u=>`<div style="display:flex;align-items:center;gap:12px;padding:10px 0;border-bottom:1px solid var(--bd)">
         <div style="flex:1"><div style="font-weight:700">${esc(u.nom_affiche)} <span class="mono" style="color:var(--faint);font-weight:400">· ${esc(u.identifiant)}</span></div>
-        <div class="hint">${u.role==='admin'?'administrateur':'utilisateur'} · créé le ${esc((u.cree_le||'').slice(0,10))}</div></div>
+        <div class="hint">${u.role==='admin'?'administrateur':(u.role==='chauffeur'?'chauffeur (constats uniquement)':'utilisateur')} · créé le ${esc((u.cree_le||'').slice(0,10))}</div></div>
         ${u.actif?'<span class="state present">actif</span>':'<span class="state missing">désactivé</span>'}
         <button class="btn btn-ghost btn-sm" data-umdp="${u.id}">Mot de passe</button>
         <button class="btn ${u.actif?'btn-danger':'btn-ghost'} btn-sm" data-uactif="${u.id}" data-etat="${u.actif?1:0}">${u.actif?'Désactiver':'Réactiver'}</button>
@@ -908,7 +970,7 @@
     });
 
     /* Init */
-    (async()=>{try{const s=await(await fetch('/etat')).json();const v=s.version?` · v${esc(s.version)}`:'';$('#auth-row').innerHTML=s.auth?`<span class="dot"></span><span>Connecté · ${esc(s.utilisateur)}${v}</span>`:`<span class="dot"></span><span>En ligne${v}</span>`;if(s.role&&s.role!=='admin')$('#nav-admin').style.display='none';}catch(_){}chargerMarque();chargerDashboard();chargerModeles();})();
+    (async()=>{try{const s=await(await fetch('/etat')).json();const v=s.version?` · v${esc(s.version)}`:'';$('#auth-row').innerHTML=s.auth?`<span class="dot"></span><span>Connecté · ${esc(s.utilisateur)}${v}</span>`:`<span class="dot"></span><span>En ligne${v}</span>`;if(s.role&&s.role!=='admin')$('#nav-admin').style.display='none';if(s.role==='chauffeur'){modeChauffeur();chargerChauffeur();chargerMarque();return;}if(s.role==='admin')chargerMobile();}catch(_){}chargerMarque();chargerDashboard();chargerModeles();})();
   </script>
 </body>
 </html>

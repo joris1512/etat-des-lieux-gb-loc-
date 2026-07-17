@@ -120,6 +120,97 @@ def _ecrire_une(xml: str, ref: str, valeur: object) -> str:
     return xml[: sd.start()] + sd.group(1) + inner2 + sd.group(3) + xml[sd.end() :]
 
 
+_EMU_PAR_POUCE = 914400
+
+
+def inserer_image(
+    xlsx: Path, feuille: str | None, cellule: str, png: bytes,
+    largeur_po: float = 2.2, hauteur_po: float = 0.85,
+) -> bool:
+    """Insère un PNG (ex. signature) ancré sur `cellule`, en préservant tout le classeur.
+
+    S'appuie sur le drawing DÉJÀ présent sur la feuille (tous nos modèles en ont un : logo,
+    perspectives). Re-signature : remplace l'image existante au lieu d'en empiler une nouvelle.
+    Renvoie False si la feuille n'a pas de drawing (image non insérée, sans erreur).
+    """
+    with zipfile.ZipFile(xlsx) as zin:
+        items = {n: zin.read(n) for n in zin.namelist()}
+
+    chemin_feuille = _chemin_feuille(items, feuille)
+    xml_feuille = items[chemin_feuille].decode("utf-8")
+    m = re.search(r'<drawing r:id="([^"]+)"', xml_feuille)
+    if not m:
+        return False
+    rid_drawing = m.group(1)
+
+    nom_court = chemin_feuille.rsplit("/", 1)[1]
+    rels_feuille = items.get(f"xl/worksheets/_rels/{nom_court}.rels", b"").decode("utf-8")
+    cible = None
+    for rel in re.findall(r"<Relationship\b[^>]*?/?>", rels_feuille):
+        if re.search(rf'\bId="{re.escape(rid_drawing)}"', rel):
+            cible = re.search(r'\bTarget="([^"]+)"', rel).group(1)
+            break
+    if not cible:
+        return False
+    chemin_drawing = "xl/" + cible.replace("../", "")
+    nom_drawing = chemin_drawing.rsplit("/", 1)[1]
+    chemin_rels_drawing = f"xl/drawings/_rels/{nom_drawing}.rels"
+
+    # 1) L'image dans le paquet (remplacée si déjà présente = re-signature).
+    chemin_media = "xl/media/signature_gb.png"
+    deja = chemin_media in items
+    items[chemin_media] = png
+
+    if not deja:
+        # 2) Content-type png (Default) si absent.
+        ct = items["[Content_Types].xml"].decode("utf-8")
+        if 'Extension="png"' not in ct:
+            ct = ct.replace(
+                "</Types>",
+                '<Default Extension="png" ContentType="image/png"/></Types>',
+            )
+            items["[Content_Types].xml"] = ct.encode("utf-8")
+
+        # 3) Relationship du drawing vers l'image.
+        if chemin_rels_drawing in items:
+            rels = items[chemin_rels_drawing].decode("utf-8")
+        else:
+            rels = ('<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
+                    '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"></Relationships>')
+        ids = re.findall(r'Id="rId(\d+)"', rels)
+        rid_img = f"rId{max((int(i) for i in ids), default=0) + 1}"
+        rels = rels.replace(
+            "</Relationships>",
+            f'<Relationship Id="{rid_img}" Type="{_REL_NS}/image" Target="../media/signature_gb.png"/></Relationships>',
+        )
+        items[chemin_rels_drawing] = rels.encode("utf-8")
+
+        # 4) L'ancre dans le drawing (oneCellAnchor sur la cellule).
+        col, row = _col_index(cellule) - 1, _row_num(cellule) - 1
+        cx, cy = int(largeur_po * _EMU_PAR_POUCE), int(hauteur_po * _EMU_PAR_POUCE)
+        dessin = items[chemin_drawing].decode("utf-8")
+        idm = re.findall(r'id="(\d+)"', dessin)
+        id_forme = max((int(i) for i in idm), default=100) + 1
+        ancre = (
+            f'<xdr:oneCellAnchor><xdr:from><xdr:col>{col}</xdr:col><xdr:colOff>0</xdr:colOff>'
+            f'<xdr:row>{row}</xdr:row><xdr:rowOff>0</xdr:rowOff></xdr:from>'
+            f'<xdr:ext cx="{cx}" cy="{cy}"/>'
+            f'<xdr:pic><xdr:nvPicPr><xdr:cNvPr id="{id_forme}" name="Signature client"/>'
+            f'<xdr:cNvPicPr/></xdr:nvPicPr><xdr:blipFill>'
+            f'<a:blip xmlns:r="{_REL_NS}" r:embed="{rid_img}"/><a:stretch><a:fillRect/></a:stretch>'
+            f'</xdr:blipFill><xdr:spPr><a:xfrm><a:off x="0" y="0"/><a:ext cx="{cx}" cy="{cy}"/></a:xfrm>'
+            f'<a:prstGeom prst="rect"><a:avLst/></a:prstGeom></xdr:spPr></xdr:pic>'
+            f'<xdr:clientData/></xdr:oneCellAnchor>'
+        )
+        dessin = dessin.replace("</xdr:wsDr>", ancre + "</xdr:wsDr>")
+        items[chemin_drawing] = dessin.encode("utf-8")
+
+    with zipfile.ZipFile(xlsx, "w", zipfile.ZIP_DEFLATED) as zout:
+        for nom, data in items.items():
+            zout.writestr(nom, data)
+    return True
+
+
 def ecrire_cellules(
     modele: Path, sortie: Path, feuille: str | None, valeurs: dict[str, object]
 ) -> None:

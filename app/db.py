@@ -185,8 +185,8 @@ def utilisateurs_actifs_existent() -> bool:
 def creer_utilisateur(identifiant: str, nom_affiche: str, hash_: str, role: str) -> int:
     """Crée un compte. Lève ValueError si l'identifiant existe déjà."""
     _ensure()
-    if role not in ("admin", "utilisateur"):
-        raise ValueError("Rôle invalide (admin ou utilisateur).")
+    if role not in ("admin", "utilisateur", "chauffeur"):
+        raise ValueError("Rôle invalide (admin, utilisateur ou chauffeur).")
     iso = datetime.now().isoformat(timespec="seconds")
     with _conn() as cx:
         ex = cx.execute(
@@ -624,6 +624,33 @@ def supprimer_interlocuteur(client_id: int, nom: str) -> None:
             "DELETE FROM interlocuteurs WHERE client_id=? AND nom=? COLLATE NOCASE",
             (client_id, (nom or "").strip()),
         )
+
+
+def lister_constats(limit: int = 30) -> list[dict]:
+    """Dossiers récents avec leurs documents Excel — la vue des chauffeurs."""
+    _ensure()
+    with _conn() as cx:
+        gens = cx.execute(
+            """SELECT g.id, g.job_id, g.horodatage_aff AS horodatage,
+                 c.raison_sociale AS client, ch.titre AS chantier
+               FROM generations g
+               LEFT JOIN clients c ON c.id = g.client_id
+               LEFT JOIN chantiers ch ON ch.id = g.chantier_id
+               WHERE g.job_id IS NOT NULL
+               ORDER BY g.id DESC LIMIT ?""",
+            (limit,),
+        ).fetchall()
+        dossiers = []
+        for g in gens:
+            fichiers = cx.execute(
+                "SELECT nom, bloc FROM fichiers WHERE generation_id=? ORDER BY id", (g["id"],)
+            ).fetchall()
+            dossiers.append({
+                "job_id": g["job_id"], "horodatage": g["horodatage"],
+                "client": g["client"], "chantier": g["chantier"],
+                "fichiers": [dict(f) for f in fichiers if f["nom"].endswith(".xlsx")],
+            })
+    return dossiers
 
 
 def infos_job(job_id: str) -> dict:

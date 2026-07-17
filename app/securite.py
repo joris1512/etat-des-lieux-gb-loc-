@@ -110,6 +110,17 @@ def _reset(ip: str) -> None:
     _echecs.pop(ip, None)
 
 
+# Chemins accessibles au rôle « chauffeur » (l'espace constats, uniquement).
+_PREFIXES_CHAUFFEUR = (
+    "/static", "/etat", "/parametres", "/constats", "/terrain",
+    "/terrain-fichier", "/telecharger", "/ouvrir", "/imprimer", "/manifest.json",
+)
+
+
+def _chemin_autorise_chauffeur(chemin: str) -> bool:
+    return chemin == "/" or any(chemin.startswith(p) for p in _PREFIXES_CHAUFFEUR)
+
+
 def utilisateur_courant(request: Request) -> str:
     """Identifiant authentifié porté par la requête (« poste-local » quand l'auth est désactivée)."""
     return getattr(request.state, "utilisateur", "poste-local")
@@ -153,6 +164,12 @@ def exiger_auth(
     if resultat:
         request.state.utilisateur, request.state.role = resultat
         _reset(ip)
+        # Rôle « chauffeur » : accès limité aux constats (et à rien d'autre).
+        if request.state.role == "chauffeur" and not _chemin_autorise_chauffeur(request.url.path):
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Accès réservé — votre compte chauffeur ne couvre que les constats.",
+            )
         return
 
     _echec(ip)

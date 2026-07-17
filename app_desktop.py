@@ -42,13 +42,20 @@ def _serveur_repond() -> bool:
 
 
 def _run_serveur() -> None:
-    """Lance uvicorn dans le thread principal de CE processus (appli de bureau : sans auth, local)."""
+    """Lance uvicorn dans le thread principal de CE processus (appli de bureau)."""
     try:
         import uvicorn
 
+        from app import db
         from app.main import app
 
-        uvicorn.run(app, host=HOTE, port=PORT, log_level="warning")
+        # Accès mobile (réglage Administration) : écoute du réseau local pour que les
+        # chauffeurs se connectent depuis leur téléphone (comptes obligatoires par ailleurs).
+        try:
+            hote = "0.0.0.0" if db.lire_parametre("acces_mobile", "0") == "1" else HOTE
+        except Exception:  # noqa: BLE001
+            hote = HOTE
+        uvicorn.run(app, host=hote, port=PORT, log_level="warning")
     except BaseException as exc:  # noqa: BLE001
         _journaliser_erreur(exc)
         raise
