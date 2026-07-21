@@ -327,6 +327,18 @@ def importer_client(
     return statut
 
 
+def journaliser(type_: str, libelle: str, client_id: int | None = None) -> None:
+    """Trace un événement dans le journal (audit) — ex. signature d'un constat."""
+    _ensure()
+    now = datetime.now()
+    with _conn() as cx:
+        cx.execute(
+            "INSERT INTO journal (horodatage, horodatage_aff, type, libelle, client_id) "
+            "VALUES (?,?,?,?,?)",
+            (now.isoformat(timespec="seconds"), now.strftime("%d/%m/%Y · %H:%M"), type_, libelle, client_id),
+        )
+
+
 # --------------------------------------------------------------------------- #
 # Enrichissement : le cœur de la base qui apprend
 # --------------------------------------------------------------------------- #
@@ -658,7 +670,8 @@ def infos_job(job_id: str) -> dict:
     _ensure()
     with _conn() as cx:
         r = cx.execute(
-            """SELECT c.raison_sociale AS client, ch.titre AS chantier, d.numero_offre AS offre
+            """SELECT c.raison_sociale AS client, ch.titre AS chantier, d.numero_offre AS offre,
+                      g.client_id AS client_id
                FROM generations g
                LEFT JOIN clients c ON c.id = g.client_id
                LEFT JOIN chantiers ch ON ch.id = g.chantier_id

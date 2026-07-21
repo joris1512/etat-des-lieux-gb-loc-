@@ -1,0 +1,24 @@
+# Service systemd — GB États des lieux (FastAPI/uvicorn derrière Caddy)
+# Installation : voir docs/DEPLOIEMENT_VPS.md (ou lancer deploy/installer_vps.sh)
+[Unit]
+Description=GB Etats des lieux (application web)
+After=network.target
+
+[Service]
+Type=simple
+User=gbapp
+Group=gbapp
+WorkingDirectory=/opt/gb-etats
+Environment=PYTHONUNBUFFERED=1
+ExecStart=/opt/gb-etats/.venv/bin/python -m uvicorn app.main:app --host 127.0.0.1 --port 8000
+Restart=always
+RestartSec=3
+
+# Durcissement (l'app n'a besoin d'écrire que dans son dossier)
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=full
+ReadWritePaths=/opt/gb-etats
+
+[Install]
+WantedBy=multi-user.target

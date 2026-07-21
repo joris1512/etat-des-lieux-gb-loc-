@@ -1,15 +1,17 @@
-"""Authentification renforcée (HTTP Basic) : mot de passe haché, anti-force-brute, journal d'audit.
+"""Authentification renforcée : sessions par cookie signé + HTTP Basic (compatibilité),
+mot de passe haché, anti-force-brute, journal d'audit.
 
-L'authentification est activée dès que `GB_PASSWORD` **ou** `GB_PASSWORD_HASH` est défini.
-- `GB_PASSWORD_HASH` (recommandé en production) : empreinte PBKDF2-SHA256 (voir scripts/hash_password.py),
-  le mot de passe en clair n'est jamais stocké.
-- `GB_PASSWORD` : mot de passe en clair (pratique en dev).
+L'authentification est activée dès que `GB_PASSWORD`/`GB_PASSWORD_HASH` est défini OU que des
+comptes existent en base. Le navigateur passe par la page /connexion (cookie de session signé
+HMAC, 7 jours) ; l'auth Basic reste acceptée (scripts, compatibilité, secours).
 Protection anti-force-brute : au-delà de `_MAX_ECHECS` échecs récents par adresse IP, l'accès est
-temporairement bloqué (HTTP 429). Les échecs et blocages sont journalisés (audit).
+temporairement bloqué (HTTP 429). Derrière un proxy de confiance (GB_PROXY_CONFIANCE=1), l'IP
+réelle est lue dans CF-Connecting-IP / X-Forwarded-For. Les échecs sont journalisés (audit).
 """
 
 from __future__ import annotations
 
+import base64
 import hashlib
 import hmac
 import logging
@@ -95,6 +97,76 @@ def _authentifier(utilisateur: str, mot_de_passe: str) -> tuple[str, str] | None
     return None
 
 
+# --- Sessions par cookie signé (page /connexion) ---
+COOKIE_SESSION = "gb_session"
+_SESSION_DUREE_S = 7 * 24 * 3600  # 7 jours : le chauffeur ne retape pas son mot de passe chaque matin
+
+
+def _secret_session() -> bytes:
+    """Secret de signature des sessions, généré une fois et conservé en base."""
+    from app import db
+
+    secret = db.lire_parametre("secret_session")
+    if not secret:
+        secret = secrets.token_hex(32)
+        db.ecrire_parametre("secret_session", secret)
+    return secret.encode("utf-8")
+
+
+def _signer(donnees: str) -> str:
+    return hmac.new(_secret_session(), donnees.encode("utf-8"), hashlib.sha256).hexdigest()
+
+
+def creer_session(identifiant: str) -> str:
+    """Jeton de session : b64(identifiant).expiration.signature — vérifiable sans état serveur."""
+    ident_b64 = base64.urlsafe_b64encode(identifiant.encode("utf-8")).decode("ascii")
+    expiration = str(int(time.time()) + _SESSION_DUREE_S)
+    corps = f"{ident_b64}.{expiration}"
+    return f"{corps}.{_signer(corps)}"
+
+
+def valider_session(jeton: str) -> tuple[str, str] | None:
+    """Renvoie (identifiant, rôle) si le jeton est signé, non expiré et le compte toujours actif."""
+    try:
+        ident_b64, expiration, signature = jeton.split(".")
+        if not hmac.compare_digest(signature, _signer(f"{ident_b64}.{expiration}")):
+            return None
+        if time.time() > int(expiration):
+            return None
+        identifiant = base64.urlsafe_b64decode(ident_b64.encode("ascii")).decode("utf-8")
+    except (ValueError, TypeError):
+        return None
+    from app import db
+
+    try:
+        compte = db.lire_utilisateur(identifiant)
+    except Exception:  # noqa: BLE001
+        compte = None
+    if compte:
+        return compte["identifiant"], compte["role"]
+    # Compte du .env (secours) : accepté aussi en session.
+    r = get_reglages()
+    if identifiant == r.utilisateur and (r.mot_de_passe or r.mot_de_passe_hash):
+        return identifiant, "admin"
+    return None
+
+
+def ip_client(request: Request) -> str:
+    """IP réelle du client — lit les en-têtes de proxy UNIQUEMENT si GB_PROXY_CONFIANCE=1.
+
+    Derrière Cloudflare/Caddy, request.client.host est l'IP du proxy : sans ce correctif,
+    l'anti-force-brute bloquerait TOUT LE MONDE dès qu'un robot échoue 8 fois.
+    """
+    if get_reglages().proxy_confiance:
+        cf = request.headers.get("CF-Connecting-IP")
+        if cf:
+            return cf.strip()
+        xff = request.headers.get("X-Forwarded-For")
+        if xff:
+            return xff.split(",")[0].strip()
+    return request.client.host if request.client else "inconnu"
+
+
 def _bloque(ip: str) -> bool:
     maintenant = time.time()
     recents = [t for t in _echecs.get(ip, []) if maintenant - t < _BLOCAGE_S]
@@ -135,16 +207,65 @@ def exiger_admin(request: Request) -> None:
         )
 
 
+def tentative_connexion(identifiant: str, mot_de_passe: str, ip: str) -> tuple[str, str]:
+    """Connexion par la page /connexion : anti-force-brute + vérification des identifiants.
+
+    Renvoie (identifiant, rôle) ou lève 429 (IP bloquée) / 401 (identifiants invalides).
+    """
+    if _bloque(ip):
+        logger.warning("AUDIT auth: connexion bloquée (trop de tentatives) depuis %s", ip)
+        raise HTTPException(
+            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+            detail="Trop de tentatives. Réessayez dans quelques minutes.",
+            headers={"Retry-After": str(_BLOCAGE_S)},
+        )
+    resultat = _authentifier(identifiant, mot_de_passe)
+    if resultat:
+        _reset(ip)
+        return resultat
+    _echec(ip)
+    logger.warning("AUDIT auth: échec de connexion depuis %s", ip)
+    raise HTTPException(
+        status_code=status.HTTP_401_UNAUTHORIZED, detail="Identifiant ou mot de passe incorrect."
+    )
+
+
+# Chemins servis SANS authentification : la page de connexion elle-même, le manifeste PWA
+# (nom + logo uniquement) et le service worker (code public de l'interface).
+_CHEMINS_PUBLICS = ("/connexion", "/manifest.json", "/sw.js")
+
+
+def _valide_et_gate_chauffeur(request: Request, identifiant: str, role: str) -> None:
+    request.state.utilisateur, request.state.role = identifiant, role
+    # Rôle « chauffeur » : accès limité aux constats (et à rien d'autre).
+    if role == "chauffeur" and not _chemin_autorise_chauffeur(request.url.path):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Accès réservé — votre compte chauffeur ne couvre que les constats.",
+        )
+
+
 def exiger_auth(
     request: Request, credentials: HTTPBasicCredentials | None = Depends(_basic)
 ) -> None:
-    """Dépendance globale : laisse passer si l'auth est désactivée, sinon vérifie + anti-brute-force."""
+    """Dépendance globale : cookie de session OU Basic ; anti-brute-force ; page /connexion."""
+    if request.url.path in _CHEMINS_PUBLICS:
+        request.state.utilisateur, request.state.role = "public", "public"
+        return
     if not auth_configuree():
         request.state.utilisateur = "poste-local"
         request.state.role = "admin"
         return
 
-    ip = request.client.host if request.client else "inconnu"
+    # 1) Session par cookie (page de connexion) — le chemin normal des navigateurs.
+    jeton = request.cookies.get(COOKIE_SESSION)
+    if jeton:
+        resultat = valider_session(jeton)
+        if resultat:
+            _valide_et_gate_chauffeur(request, *resultat)
+            return
+
+    ip = ip_client(request)
     if _bloque(ip):
         logger.warning("AUDIT auth: accès bloqué (trop de tentatives) depuis %s", ip)
         raise HTTPException(
@@ -153,27 +274,26 @@ def exiger_auth(
             headers={"Retry-After": str(_BLOCAGE_S)},
         )
 
-    non_authentifie = HTTPException(
-        status_code=status.HTTP_401_UNAUTHORIZED,
-        detail="Authentification requise.",
-        headers={"WWW-Authenticate": "Basic"},
-    )
-    if credentials is None:
-        raise non_authentifie
-    resultat = _authentifier(credentials.username, credentials.password)
-    if resultat:
-        request.state.utilisateur, request.state.role = resultat
-        _reset(ip)
-        # Rôle « chauffeur » : accès limité aux constats (et à rien d'autre).
-        if request.state.role == "chauffeur" and not _chemin_autorise_chauffeur(request.url.path):
-            raise HTTPException(
-                status_code=status.HTTP_403_FORBIDDEN,
-                detail="Accès réservé — votre compte chauffeur ne couvre que les constats.",
-            )
-        return
+    # 2) Auth Basic (compatibilité scripts/API + secours).
+    if credentials is not None:
+        resultat = _authentifier(credentials.username, credentials.password)
+        if resultat:
+            _reset(ip)
+            _valide_et_gate_chauffeur(request, *resultat)
+            return
+        _echec(ip)
+        # On ne journalise PAS l'identifiant saisi : un mot de passe tapé par erreur dans le champ
+        # « utilisateur » finirait en clair dans les logs (minimisation, art. 5 RGPD).
+        logger.warning("AUDIT auth: échec d'authentification depuis %s", ip)
 
-    _echec(ip)
-    # On ne journalise PAS l'identifiant saisi : un mot de passe tapé par erreur dans le champ
-    # « utilisateur » finirait en clair dans les logs (minimisation, art. 5 RGPD).
-    logger.warning("AUDIT auth: échec d'authentification depuis %s", ip)
-    raise non_authentifie
+    # 3) Rien de valide : le navigateur qui demande une PAGE part sur /connexion ;
+    #    les appels d'API reçoivent un 401 classique.
+    if request.method == "GET" and request.url.path == "/":
+        raise HTTPException(
+            status_code=status.HTTP_302_FOUND, headers={"Location": "/connexion"}
+        )
+    # Pas d'en-tête WWW-Authenticate : sinon les navigateurs rouvrent leur boîte de dialogue
+    # grise par-dessus notre page de connexion. L'interface redirige elle-même sur 401.
+    raise HTTPException(
+        status_code=status.HTTP_401_UNAUTHORIZED, detail="Authentification requise."
+    )

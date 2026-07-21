@@ -1,0 +1,10 @@
+# Caddy — HTTPS automatique (Let's Encrypt) devant l'application.
+# Remplacez app.gb-location.fr par votre domaine, puis : systemctl reload caddy
+app.gb-location.fr {
+	encode gzip
+	reverse_proxy 127.0.0.1:8000
+
+	header {
+		Strict-Transport-Security "max-age=31536000"
+	}
+}

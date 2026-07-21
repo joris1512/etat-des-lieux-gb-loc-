@@ -10,7 +10,7 @@ from pathlib import Path
 from pydantic import Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
-VERSION = "2.4.0"
+VERSION = "2.5.0"
 
 # Racine du projet = dossier parent de `app/`.
 # En mode « figé » (.exe PyInstaller --onedir), la racine est le dossier de l'exécutable
@@ -55,6 +55,11 @@ class Reglages(BaseSettings):
     # Hôte / port (utilisés par les scripts de lancement).
     host: str = Field(default="127.0.0.1", validation_alias="GB_HOST")
     port: int = Field(default=8000, validation_alias="GB_PORT")
+
+    # Derrière un proxy de confiance (Caddy sur le serveur, tunnel Cloudflare) : lire l'IP
+    # réelle du client dans CF-Connecting-IP / X-Forwarded-For (anti-force-brute, journal).
+    # NE PAS activer quand l'app est exposée en direct (l'en-tête serait falsifiable).
+    proxy_confiance: bool = Field(default=False, validation_alias="GB_PROXY_CONFIANCE")
 
     @field_validator("mot_de_passe", "mot_de_passe_hash", mode="before")
     @classmethod

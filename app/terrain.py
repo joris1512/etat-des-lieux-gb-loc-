@@ -8,6 +8,7 @@ signature et le PDF de constat ; l'état de saisie vit dans constat.json (rechar
 
 from __future__ import annotations
 
+import hashlib
 import json
 import re
 from datetime import datetime
@@ -70,6 +71,7 @@ def charger_constat(document: Path, feuille: str | None, dossier: Path) -> dict:
     data["photos"] = sorted(p.name for p in dossier.glob("photo-*.*"))
     data["signature"] = (dossier / "signature.png").exists()
     data["signataire"] = data.get("signataire", "")
+    data["fonction"] = data.get("fonction", "")
     data["pdf"] = "constat.pdf" if (dossier / "constat.pdf").exists() else None
     return data
 
@@ -130,11 +132,20 @@ def _ancre_signature(document: Path, feuille: str | None) -> str | None:
 
 
 def enregistrer_signature(
-    dossier: Path, png: bytes, signataire: str, document: Path | None = None
-) -> None:
+    dossier: Path,
+    png: bytes,
+    signataire: str,
+    document: Path | None = None,
+    fonction: str = "",
+) -> str | None:
+    """Enregistre la signature + construit le DOSSIER DE PREUVE (exigé par la jurisprudence
+    pour donner du poids à une signature électronique simple) : identité et fonction du
+    signataire, horodatage, et empreinte SHA-256 du document Excel signé — calculée à
+    l'instant exact de la signature. Renvoie l'empreinte (None si pas de document)."""
     if not png.startswith(b"\x89PNG\r\n\x1a\n"):
         raise ValueError("Signature invalide.")
     (dossier / "signature.png").write_bytes(png)
+    empreinte: str | None = None
     # Insère aussi la signature DANS le document Excel (zone « Date, Nom et Signature »).
     if document is not None and document.exists():
         try:
@@ -143,11 +154,21 @@ def enregistrer_signature(
                 patch_xlsx.inserer_image(document, None, ancre, png)
         except Exception:  # noqa: BLE001 — l'insertion Excel ne doit pas bloquer la signature
             pass
+        try:
+            empreinte = hashlib.sha256(document.read_bytes()).hexdigest()
+        except OSError:
+            empreinte = None
     js = _chemin_json(dossier)
     data = json.loads(js.read_text(encoding="utf-8")) if js.exists() else {}
+    maintenant = datetime.now()
     data["signataire"] = (signataire or "").strip()
-    data["signe_le"] = datetime.now().strftime("%d/%m/%Y à %H:%M")
+    data["fonction"] = (fonction or "").strip()
+    data["signe_le"] = maintenant.strftime("%d/%m/%Y à %H:%M")
+    data["signe_le_iso"] = maintenant.isoformat(timespec="seconds")
+    if empreinte:
+        data["empreinte_sha256"] = empreinte
     js.write_text(json.dumps(data, ensure_ascii=False, indent=1), encoding="utf-8")
+    return empreinte
 
 
 def generer_pdf(dossier: Path, titre: str, sous_titre: str, societe: str = "") -> Path:
@@ -239,12 +260,21 @@ def generer_pdf(dossier: Path, titre: str, sous_titre: str, societe: str = "") -
         c.drawString(marge, 58 * mm, "Signature du client — « bon pour accord »")
         c.setFont("Helvetica", 9)
         qui = data.get("signataire") or ""
+        fonction = data.get("fonction") or ""
         quand = data.get("signe_le") or ""
-        c.drawString(marge, 52 * mm, f"{qui}   ·   signé le {quand}")
+        identite = f"{qui} ({fonction})" if fonction else qui
+        c.drawString(marge, 52 * mm, f"{identite}   ·   signé le {quand}")
         try:
             c.drawImage(ImageReader(str(sig)), marge, 20 * mm, width=70 * mm, height=28 * mm,
                         preserveAspectRatio=True, anchor="sw", mask="auto")
         except Exception:  # noqa: BLE001
             pass
+        # Élément de preuve : empreinte du document Excel au moment exact de la signature.
+        if data.get("empreinte_sha256"):
+            c.setFont("Helvetica", 6.5)
+            c.setFillColor(colors.grey)
+            c.drawString(marge, 14 * mm,
+                         f"Empreinte SHA-256 du document signé : {data['empreinte_sha256']}")
+            c.setFillColor(colors.black)
     c.save()
     return cible

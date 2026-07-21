@@ -6,6 +6,12 @@
       "runtimeExecutable": ".venv\\Scripts\\python.exe",
       "runtimeArgs": ["scripts\\preview_ui.py"],
       "port": 8010
+    },
+    {
+      "name": "app-auth",
+      "runtimeExecutable": ".venv\\Scripts\\python.exe",
+      "runtimeArgs": ["scripts\\preview_connexion.py"],
+      "port": 8020
     }
   ]
 }

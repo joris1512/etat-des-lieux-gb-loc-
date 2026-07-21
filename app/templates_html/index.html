@@ -6,7 +6,7 @@
   <title>GB Location — Cockpit états des lieux</title>
   <link rel="icon" href="/static/logo.png" />
   <link rel="manifest" href="/manifest.json" />
-  <link rel="apple-touch-icon" href="/static/logo.png" />
+  <link rel="apple-touch-icon" href="/static/icone-192.png" />
   <meta name="theme-color" content="#0E1A14" />
   <style>
     :root {
@@ -252,6 +252,20 @@
       .nav-item{width:auto;} .nav-item.active::before{display:none;} .grid4{grid-template-columns:repeat(2,1fr);} .row2,.clist{grid-template-columns:1fr;} .main{padding:22px 16px 50px;} h1.title{font-size:32px;}
     }
 
+    /* Téléphone (chauffeurs sur chantier) : constat plein écran, cibles tactiles larges */
+    @media (max-width:640px){
+      .main{padding:16px 12px 40px;} h1.title{font-size:26px;} .grid4{grid-template-columns:1fr 1fr;}
+      .btn{min-height:44px;} input,select{min-height:44px;font-size:16px;} /* 16px = pas de zoom iOS */
+      #constat-overlay > div{margin:0 auto;padding:0 8px 30px;}
+      #constat-overlay .card{border-radius:16px;padding:16px 12px;}
+      #ct-lignes{max-height:none;}
+      #ct-lignes table{font-size:13px;} #ct-lignes td:first-child{width:34% !important;font-size:12px;}
+      #ct-canvas{width:100%;height:auto;}
+      #constat-overlay .actions .btn, #ct-envoyer{width:100%;}
+      #ct-photo{max-width:100% !important;}
+      #view-chauffeur .frow{flex-wrap:wrap;gap:8px;}
+    }
+
     /* ================= COUCHE DE MOUVEMENT — « fluidité magique » ================= */
     html{scroll-behavior:smooth;}
 
@@ -483,13 +497,32 @@
           </div>
         </div>
         <div class="card" style="margin-bottom:18px">
-          <div class="card-h">Accès téléphone (chauffeurs)</div>
-          <p class="hint" style="margin:0 0 12px">Autorise les téléphones du réseau de la société à ouvrir l'application (comptes chauffeurs requis). Sur le téléphone : ouvrir l'adresse ci-dessous puis « Ajouter à l'écran d'accueil ».</p>
-          <div style="display:flex;gap:14px;align-items:center;flex-wrap:wrap">
-            <button type="button" class="btn btn-primary" id="mob-toggle">…</button>
+          <div class="card-h">Accès à distance (chauffeurs sur chantier)</div>
+          <p class="hint" style="margin:0 0 12px">Une fois l'application mise en ligne (voir <em>docs/DEPLOIEMENT_VPS.md</em>), renseignez son adresse publique : le QR code à faire scanner aux chauffeurs apparaît. Sur le téléphone : ouvrir l'adresse, se connecter, puis « Ajouter à l'écran d'accueil » — l'application s'installe comme une vraie app.</p>
+          <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">
+            <input id="mob-adresse" placeholder="https://app.gb-location.fr" style="max-width:320px">
+            <button type="button" class="btn btn-primary" id="mob-adresse-save">Enregistrer</button>
             <div id="mob-infos" class="hint"></div>
           </div>
           <div id="mob-qr" style="margin-top:12px"></div>
+        </div>
+        <div class="card" style="margin-bottom:18px">
+          <div class="card-h">E-mail (copie du constat au client)</div>
+          <p class="hint" style="margin:0 0 12px">Serveur d'envoi (SMTP) de la société — permet aux chauffeurs d'envoyer la copie signée depuis le chantier. Demandez ces réglages à votre prestataire informatique ou fournisseur de messagerie.</p>
+          <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:10px;max-width:900px">
+            <div class="field"><label>Serveur SMTP</label><input id="smtp-hote" placeholder="smtp.exemple.fr"></div>
+            <div class="field"><label>Port</label><input id="smtp-port" placeholder="587"></div>
+            <div class="field"><label>Sécurité</label><select id="smtp-securite" style="height:38px;background:var(--surface);color:var(--ink);border:1px solid var(--bd2);border-radius:var(--rc);padding:0 10px"><option value="tls">STARTTLS (587)</option><option value="ssl">SSL (465)</option></select></div>
+            <div class="field"><label>Utilisateur</label><input id="smtp-utilisateur" placeholder="contact@gb-location.fr"></div>
+            <div class="field"><label>Mot de passe</label><input id="smtp-mdp" type="password" placeholder="(inchangé si vide)"></div>
+            <div class="field"><label>Expéditeur affiché</label><input id="smtp-expediteur" placeholder="etats-des-lieux@gb-location.fr"></div>
+          </div>
+          <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-top:12px">
+            <button type="button" class="btn btn-primary" id="smtp-save">Enregistrer</button>
+            <input id="smtp-test-dest" type="email" placeholder="votre@email.fr pour tester" style="max-width:240px">
+            <button type="button" class="btn btn-ghost" id="smtp-test">Envoyer un test</button>
+            <span class="hint" id="smtp-etat"></span>
+          </div>
         </div>
         <div class="card" style="margin-bottom:18px">
           <div class="card-h">Ajouter un compte</div>
@@ -528,16 +561,24 @@
           <canvas id="ct-canvas" width="560" height="150" style="background:#fff;border-radius:10px;touch-action:none;border:2px solid var(--bd2)"></canvas>
           <div style="display:flex;flex-direction:column;gap:10px;min-width:220px">
             <input id="ct-signataire" placeholder="Nom du signataire">
+            <input id="ct-fonction" placeholder="Fonction / société (ex. chef de chantier)">
+            <label class="hint" style="display:flex;gap:8px;align-items:flex-start;cursor:pointer"><input type="checkbox" id="ct-accord" style="width:auto;height:auto;margin-top:2px">J'ai lu le constat et je l'approuve (« bon pour accord »)</label>
             <button type="button" class="btn btn-ghost btn-sm" id="ct-effacer">Effacer la signature</button>
             <button type="button" class="btn btn-primary" id="ct-signer">Valider la signature</button>
             <span class="hint" id="ct-signe"></span>
           </div>
         </div>
+        <div class="card-h" style="margin-top:18px">Copie au client</div>
+        <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center">
+          <input id="ct-email" type="email" placeholder="Email du client (ex. contact@entreprise.fr)" style="max-width:320px">
+          <button type="button" class="btn btn-primary" id="ct-envoyer">Envoyer la copie signée</button>
+          <span class="hint">PDF + empreinte du document — preuve horodatée pour les deux parties.</span>
+        </div>
         <div class="actions" style="margin-top:22px;flex-wrap:wrap">
           <button type="button" class="btn btn-primary" id="ct-save">Enregistrer le constat</button>
           <button type="button" class="btn btn-ghost" id="ct-pdf">Générer le PDF</button>
           <a class="btn btn-ghost" id="ct-voir-pdf" style="display:none" target="_blank">Voir le PDF</a>
-          <button type="button" class="btn btn-red" id="ct-partager">Partager (e-mail)</button>
+          <button type="button" class="btn btn-red" id="ct-partager">Brouillon Outlook (poste bureau)</button>
         </div>
       </div>
     </div>
@@ -573,7 +614,7 @@
       document.querySelectorAll('.nav-item[data-view]').forEach(x=>x.classList.toggle('active',x.dataset.view===v));
       document.querySelectorAll('.view').forEach(s=>s.classList.remove('active'));
       $('#view-'+v).classList.add('active');
-      ({dashboard:chargerDashboard,modeles:chargerModeles,historique:()=>chargerHistorique(),clients:chargerClients,statistiques:chargerStats,utilisateurs:()=>{chargerUtilisateurs();chargerMobile();},chauffeur:chargerChauffeur}[v]||(()=>{}))();
+      ({dashboard:chargerDashboard,modeles:chargerModeles,historique:()=>chargerHistorique(),clients:chargerClients,statistiques:chargerStats,utilisateurs:()=>{chargerUtilisateurs();chargerMobile();chargerSmtp();},chauffeur:chargerChauffeur}[v]||(()=>{}))();
     }
     document.querySelectorAll('.nav-item[data-view]').forEach(b=>b.addEventListener('click',()=>goto(b.dataset.view)));
     document.querySelectorAll('[data-goto]').forEach(b=>b.addEventListener('click',()=>goto(b.dataset.goto)));
@@ -840,8 +881,9 @@
       $('#ct-lignes').innerHTML='<table class="tbl"><thead><tr><th>Élément</th><th>Début de loc</th><th>Fin de loc</th></tr></thead><tbody>'+
         (d.lignes||[]).map(l=>`<tr><td style="width:38%">${esc(l.libelle)}</td><td><input data-ct-l="${l.ligne}" data-ct-k="debut" value="${esc(l.debut||'')}" style="width:100%"></td><td><input data-ct-l="${l.ligne}" data-ct-k="fin" value="${esc(l.fin||'')}" style="width:100%"></td></tr>`).join('')+'</tbody></table>';
       $('#ct-photos').innerHTML=(d.photos||[]).map(p=>`<img src="/terrain-fichier/${encodeURIComponent(ctx.job)}/${encodeURIComponent(ctx.nom)}/${encodeURIComponent(p)}" style="height:84px;border-radius:8px;border:1px solid var(--bd2)" title="${esc(p)}">`).join('')||'<span class="hint">aucune photo</span>';
-      $('#ct-signe').textContent=d.signature?`Signé${d.signataire?' par '+d.signataire:''} ✔`:'';
+      $('#ct-signe').textContent=d.signature?`Signé${d.signataire?' par '+d.signataire:''}${d.fonction?' ('+d.fonction+')':''} ✔`:'';
       if(d.signataire)$('#ct-signataire').value=d.signataire;
+      if(d.fonction)$('#ct-fonction').value=d.fonction;
       const pdfBtn=$('#ct-voir-pdf');
       if(d.pdf){pdfBtn.style.display='';pdfBtn.href=`/terrain-fichier/${encodeURIComponent(ctx.job)}/${encodeURIComponent(ctx.nom)}/constat.pdf`;}else pdfBtn.style.display='none';
     }
@@ -860,8 +902,20 @@
       try{const r=await fetch(ctUrl(),{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({lignes:Object.values(map)})});const d=await r.json();if(!r.ok)throw new Error(d.detail||'Erreur');toast('Constat enregistré dans le document Excel.','ok');renderConstat(d);}
       catch(e){toast(e.message,'bad');}
     });
+    /* Compression côté navigateur : les photos de chantier partent en secondes même en 4G. */
+    async function compresserPhoto(f){
+      if(f.size<600*1024)return f;
+      try{
+        const img=await createImageBitmap(f);
+        const MAX=1600,ratio=Math.min(1,MAX/Math.max(img.width,img.height));
+        const c=document.createElement('canvas');c.width=Math.round(img.width*ratio);c.height=Math.round(img.height*ratio);
+        c.getContext('2d').drawImage(img,0,0,c.width,c.height);
+        const blob=await new Promise(res=>c.toBlob(res,'image/jpeg',.82));
+        return (blob&&blob.size<f.size)?new File([blob],f.name.replace(/\.\w+$/,'.jpg'),{type:'image/jpeg'}):f;
+      }catch(_){return f;}
+    }
     $('#ct-photo').addEventListener('change',async()=>{
-      for(const f of $('#ct-photo').files){const fd=new FormData();fd.append('fichier',f);
+      for(const f of $('#ct-photo').files){const fd=new FormData();fd.append('fichier',await compresserPhoto(f));
         try{const r=await fetch(ctUrl('/photo'),{method:'POST',body:fd});const d=await r.json();if(!r.ok)throw new Error(d.detail||'Erreur');renderConstat(d);}catch(e){toast(e.message,'bad');}}
       $('#ct-photo').value='';toast('Photo(s) ajoutée(s).','ok');
     });
@@ -875,8 +929,18 @@
     $('#ct-effacer').addEventListener('click',effacerCanvas);
     $('#ct-signer').addEventListener('click',async()=>{
       if(vide){toast('Faites signer dans le cadre blanc.','bad');return;}
-      try{const r=await fetch(ctUrl('/signature'),{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({image:cv.toDataURL('image/png'),signataire:$('#ct-signataire').value})});const d=await r.json();if(!r.ok)throw new Error(d.detail||'Erreur');toast('Signature enregistrée.','ok');renderConstat(d);}
+      if(!$('#ct-signataire').value.trim()){toast('Indiquez le nom du signataire (élément de preuve).','bad');return;}
+      if(!$('#ct-accord').checked){toast('Le signataire doit cocher « lu et approuvé ».','bad');return;}
+      try{const r=await fetch(ctUrl('/signature'),{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({image:cv.toDataURL('image/png'),signataire:$('#ct-signataire').value,fonction:$('#ct-fonction').value})});const d=await r.json();if(!r.ok)throw new Error(d.detail||'Erreur');toast('Signature enregistrée dans le document — preuve horodatée constituée.','ok');renderConstat(d);}
       catch(e){toast(e.message,'bad');}
+    });
+    $('#ct-envoyer').addEventListener('click',async()=>{
+      const dest=$('#ct-email').value.trim();
+      if(!dest.includes('@')){toast('Entrez l\'email du client.','bad');return;}
+      const b=$('#ct-envoyer');b.disabled=true;b.textContent='Envoi…';
+      try{const r=await fetch(ctUrl('/envoyer'),{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({destinataire:dest})});const d=await r.json();if(!r.ok)throw new Error(d.detail||'Erreur');toast('Copie signée envoyée au client.','ok');}
+      catch(e){toast(e.message,'bad');}
+      finally{b.disabled=false;b.textContent='Envoyer la copie signée';}
     });
     $('#ct-pdf').addEventListener('click',async()=>{
       try{const r=await fetch(ctUrl('/pdf'),{method:'POST'});const d=await r.json();if(!r.ok)throw new Error(d.detail||'Erreur');toast('PDF de constat généré.','ok');renderConstat(d);}
@@ -914,27 +978,49 @@
     $('#soc-logo').addEventListener('change',async()=>{const f=$('#soc-logo').files[0];if(!f)return;const fd=new FormData();fd.append('fichier',f);try{const r=await fetch('/parametres/logo',{method:'POST',body:fd});const d=await r.json();if(!r.ok)throw new Error(d.detail||'Erreur');toast('Logo remplacé.','ok');$('#soc-logo').value='';chargerMarque();}catch(e){toast(e.message,'bad');}});
     $('#soc-logo-defaut').addEventListener('click',async()=>{try{const r=await fetch('/parametres/logo',{method:'DELETE'});if(!r.ok){const d=await r.json();throw new Error(d.detail||'Erreur');}toast('Logo par défaut restauré.','ok');chargerMarque();}catch(e){toast(e.message,'bad');}});
 
-    /* ACCÈS TÉLÉPHONE (administration) */
+    /* ACCÈS À DISTANCE (administration) */
     async function chargerMobile(){
-      const btn=$('#mob-toggle'),infos=$('#mob-infos'),qr=$('#mob-qr');if(!btn)return;
+      const champ=$('#mob-adresse'),infos=$('#mob-infos'),qr=$('#mob-qr');if(!champ)return;
       try{
         const d=await(await fetch('/mobile-infos')).json();
-        btn.textContent=d.actif?'Désactiver l\'accès téléphone':'Activer l\'accès téléphone';
-        btn.dataset.actif=d.actif?'1':'0';
-        if(d.actif&&d.adresses.length){
-          infos.innerHTML='Adresse à ouvrir sur le téléphone : '+d.adresses.map(a=>`<strong>http://${a}:${d.port}</strong>`).join(' ou ');
-          qr.innerHTML=`<img src="/mobile-qr" alt="QR code" style="width:170px;height:170px;border-radius:14px;background:#fff;padding:10px">`;
-        }else{infos.textContent=d.actif?'Accès activé — adresse réseau introuvable.':'Accès désactivé : l\'application n\'est joignable que sur ce poste.';qr.innerHTML='';}
+        if(d.adresse_publique&&!champ.value)champ.value=d.adresse_publique;
+        if(d.adresse_publique){
+          infos.innerHTML=`Application en ligne : <strong>${esc(d.adresse_publique)}</strong>`;
+          qr.innerHTML=`<img src="/mobile-qr?v=${Date.now()}" alt="QR code" style="width:170px;height:170px;border-radius:14px;background:#fff;padding:10px"><div class="hint" style="margin-top:6px">À faire scanner aux chauffeurs — puis « Ajouter à l'écran d'accueil ».</div>`;
+        }else{infos.textContent='Pas encore en ligne : les chauffeurs ne peuvent pas se connecter depuis le chantier.';qr.innerHTML='';}
       }catch(_){infos.textContent='';}
     }
-    $('#mob-toggle').addEventListener('click',async()=>{
-      const btn=$('#mob-toggle');
+    $('#mob-adresse-save').addEventListener('click',async()=>{
       try{
-        const r=await fetch('/mobile-acces',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({actif:btn.dataset.actif!=='1'})});
+        const r=await fetch('/mobile-adresse',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({adresse:$('#mob-adresse').value.trim()})});
         const d=await r.json();if(!r.ok)throw new Error(d.detail||'Erreur');
-        toast(d.redemarrage_requis?'Réglage enregistré — fermez puis rouvrez l\'application pour l\'appliquer.':'Réglage enregistré.','ok');
-        chargerMobile();
+        toast(d.adresse_publique?'Adresse publique enregistrée.':'Adresse effacée.','ok');chargerMobile();
       }catch(e){toast(e.message,'bad');}
+    });
+
+    /* E-MAIL SMTP (administration) */
+    async function chargerSmtp(){
+      try{const d=await(await fetch('/parametres/smtp')).json();
+        $('#smtp-hote').value=d.hote;$('#smtp-port').value=d.port;$('#smtp-securite').value=d.securite;
+        $('#smtp-utilisateur').value=d.utilisateur;$('#smtp-expediteur').value=d.expediteur;
+        $('#smtp-etat').textContent=d.configure?'Envoi configuré ✔':'Non configuré — l\'envoi au client est indisponible.';
+      }catch(_){}
+    }
+    $('#smtp-save').addEventListener('click',async()=>{
+      const corps={hote:$('#smtp-hote').value.trim(),port:$('#smtp-port').value.trim(),securite:$('#smtp-securite').value,
+        utilisateur:$('#smtp-utilisateur').value.trim(),expediteur:$('#smtp-expediteur').value.trim(),mdp:$('#smtp-mdp').value};
+      try{const r=await fetch('/parametres/smtp',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(corps)});
+        const d=await r.json();if(!r.ok)throw new Error(d.detail||'Erreur');$('#smtp-mdp').value='';toast('Configuration e-mail enregistrée.','ok');chargerSmtp();}
+      catch(e){toast(e.message,'bad');}
+    });
+    $('#smtp-test').addEventListener('click',async()=>{
+      const dest=$('#smtp-test-dest').value.trim();
+      if(!dest.includes('@')){toast('Entrez une adresse de test.','bad');return;}
+      const b=$('#smtp-test');b.disabled=true;
+      try{const r=await fetch('/parametres/smtp/test',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({destinataire:dest})});
+        const d=await r.json();if(!r.ok)throw new Error(d.detail||'Erreur');toast('E-mail de test envoyé — vérifiez la boîte de réception.','ok');}
+      catch(e){toast(e.message,'bad');}
+      finally{b.disabled=false;}
     });
 
     /* UTILISATEURS (administration) */
@@ -969,8 +1055,16 @@
       catch(e){toast(e.message,'bad');}
     });
 
+    /* Session expirée : toute réponse 401 renvoie proprement à la page de connexion. */
+    const _fetch=window.fetch.bind(window);
+    window.fetch=async(...args)=>{const r=await _fetch(...args);if(r.status===401&&!String(args[0]).includes('/connexion'))location.replace('/connexion');return r;};
+
+    /* Application installable : service worker (interface disponible même réseau instable). */
+    if('serviceWorker' in navigator&&(location.protocol==='https:'||['localhost','127.0.0.1'].includes(location.hostname)))
+      navigator.serviceWorker.register('/sw.js').catch(()=>{});
+
     /* Init */
-    (async()=>{try{const s=await(await fetch('/etat')).json();const v=s.version?` · v${esc(s.version)}`:'';$('#auth-row').innerHTML=s.auth?`<span class="dot"></span><span>Connecté · ${esc(s.utilisateur)}${v}</span>`:`<span class="dot"></span><span>En ligne${v}</span>`;if(s.role&&s.role!=='admin')$('#nav-admin').style.display='none';if(s.role==='chauffeur'){modeChauffeur();chargerChauffeur();chargerMarque();return;}if(s.role==='admin')chargerMobile();}catch(_){}chargerMarque();chargerDashboard();chargerModeles();})();
+    (async()=>{try{const s=await(await fetch('/etat')).json();const v=s.version?` · v${esc(s.version)}`:'';$('#auth-row').innerHTML=s.auth?`<span class="dot"></span><span>Connecté · ${esc(s.utilisateur)}${v}</span> <button type="button" class="btn btn-ghost btn-sm" id="btn-sortie" style="margin-left:8px;padding:2px 12px;height:26px;font-size:11.5px">Se déconnecter</button>`:`<span class="dot"></span><span>En ligne${v}</span>`;const bs=$('#btn-sortie');if(bs)bs.addEventListener('click',async()=>{try{await fetch('/deconnexion',{method:'POST'});}catch(_){}location.replace('/connexion');});if(s.role&&s.role!=='admin')$('#nav-admin').style.display='none';if(s.role==='chauffeur'){modeChauffeur();chargerChauffeur();chargerMarque();return;}if(s.role==='admin'){chargerMobile();chargerSmtp();}}catch(_){}chargerMarque();chargerDashboard();chargerModeles();})();
   </script>
 </body>
 </html>

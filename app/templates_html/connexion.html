@@ -1,0 +1,105 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#0E1A14">
+<title>Connexion — États des lieux</title>
+<link rel="icon" href="/static/logo.png">
+<link rel="manifest" href="/manifest.json">
+<link rel="apple-touch-icon" href="/static/icone-192.png">
+<style>
+  :root{
+    --fond:#060a12; --surface:#0d1420; --surface2:#111a29; --bd:rgba(148,180,255,.14);
+    --ink:#e8eefb; --mut:#8b9bb8; --vert:#1f8a4c; --vert2:#25a35a; --rouge:#e5484d;
+  }
+  *{margin:0;padding:0;box-sizing:border-box}
+  html,body{height:100%}
+  body{
+    font-family:"Segoe UI",system-ui,-apple-system,sans-serif;background:var(--fond);color:var(--ink);
+    display:flex;align-items:center;justify-content:center;padding:24px;overflow:hidden;position:relative;
+  }
+  body::before,body::after{
+    content:"";position:fixed;border-radius:50%;filter:blur(90px);opacity:.35;pointer-events:none;z-index:0;
+  }
+  body::before{width:520px;height:520px;background:radial-gradient(circle,#1f8a4c55,transparent 70%);top:-140px;left:-120px;animation:derive1 16s ease-in-out infinite alternate}
+  body::after{width:460px;height:460px;background:radial-gradient(circle,#1c4d8f44,transparent 70%);bottom:-120px;right:-100px;animation:derive2 20s ease-in-out infinite alternate}
+  @keyframes derive1{to{transform:translate(60px,40px)}}
+  @keyframes derive2{to{transform:translate(-50px,-30px)}}
+  @media (prefers-reduced-motion: reduce){body::before,body::after{animation:none}}
+  .carte{
+    position:relative;z-index:1;width:100%;max-width:410px;background:linear-gradient(180deg,var(--surface2),var(--surface));
+    border:1px solid var(--bd);border-radius:26px;padding:38px 34px 30px;box-shadow:0 30px 80px rgba(0,0,0,.5);
+    animation:montee .55s cubic-bezier(.16,1,.3,1);
+  }
+  @keyframes montee{from{opacity:0;transform:translateY(18px)}to{opacity:1;transform:none}}
+  .marque{display:flex;align-items:center;gap:14px;margin-bottom:26px}
+  .marque img{width:52px;height:52px;border-radius:14px;background:#fff;padding:6px;object-fit:contain}
+  .marque .nom{font-size:19px;font-weight:700;letter-spacing:.2px}
+  .marque .sous{font-size:12.5px;color:var(--mut);margin-top:2px}
+  h1{font-size:26px;font-weight:800;margin-bottom:6px;background:linear-gradient(90deg,#e8eefb,#9fd6b4);-webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent}
+  .aide{font-size:13.5px;color:var(--mut);margin-bottom:24px}
+  label{display:block;font-size:12.5px;color:var(--mut);margin:0 0 7px 2px;letter-spacing:.3px}
+  input{
+    width:100%;height:50px;background:rgba(255,255,255,.04);border:1px solid var(--bd);border-radius:14px;
+    color:var(--ink);font-size:16px;padding:0 16px;outline:none;transition:border-color .2s, background .2s;
+  }
+  input:focus{border-color:var(--vert2);background:rgba(37,163,90,.06)}
+  .champ{margin-bottom:16px}
+  button{
+    width:100%;height:52px;border:none;border-radius:999px;cursor:pointer;margin-top:8px;
+    background:linear-gradient(90deg,var(--vert),var(--vert2));color:#fff;font-size:16.5px;font-weight:700;
+    letter-spacing:.3px;transition:transform .15s, box-shadow .2s;box-shadow:0 10px 30px rgba(31,138,76,.35);
+  }
+  button:hover{transform:translateY(-1px);box-shadow:0 14px 36px rgba(31,138,76,.45)}
+  button:active{transform:translateY(1px)}
+  button:disabled{opacity:.6;cursor:wait;transform:none}
+  .erreur{
+    display:none;margin:0 0 16px;padding:12px 14px;border-radius:12px;font-size:13.5px;
+    background:rgba(229,72,77,.12);border:1px solid rgba(229,72,77,.35);color:#ffb3b5;
+  }
+  .pied{margin-top:22px;text-align:center;font-size:12px;color:var(--mut)}
+  @media (max-width:480px){
+    body{padding:14px;align-items:flex-start;padding-top:12vh}
+    .carte{padding:30px 22px 24px;border-radius:22px}
+  }
+</style>
+</head>
+<body>
+  <form class="carte" id="f" autocomplete="on">
+    <div class="marque">
+      <img src="/static/logo.png" alt="">
+      <div><div class="nom">{{SOCIETE}}</div><div class="sous">États des lieux</div></div>
+    </div>
+    <h1>Connexion</h1>
+    <p class="aide">Entrez vos identifiants pour accéder à l'application.</p>
+    <div class="erreur" id="err"></div>
+    <div class="champ">
+      <label for="u">Identifiant</label>
+      <input id="u" name="username" autocomplete="username" autocapitalize="none" autocorrect="off" required autofocus>
+    </div>
+    <div class="champ">
+      <label for="p">Mot de passe</label>
+      <input id="p" name="password" type="password" autocomplete="current-password" required>
+    </div>
+    <button id="go" type="submit">Se connecter</button>
+    <div class="pied">{{SOCIETE}} · v{{VERSION}}</div>
+  </form>
+<script>
+  const f=document.getElementById('f'),err=document.getElementById('err'),go=document.getElementById('go');
+  f.addEventListener('submit',async(e)=>{
+    e.preventDefault();err.style.display='none';go.disabled=true;go.textContent='Connexion…';
+    try{
+      const r=await fetch('/connexion',{method:'POST',headers:{'Content-Type':'application/json'},
+        body:JSON.stringify({identifiant:document.getElementById('u').value.trim(),mot_de_passe:document.getElementById('p').value})});
+      const d=await r.json().catch(()=>({}));
+      if(!r.ok)throw new Error(d.detail||'Identifiants incorrects.');
+      location.replace('/');
+    }catch(ex){
+      err.textContent=ex.message;err.style.display='block';
+      go.disabled=false;go.textContent='Se connecter';
+    }
+  });
+</script>
+</body>
+</html>

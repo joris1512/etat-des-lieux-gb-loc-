@@ -10,10 +10,16 @@ from contextlib import asynccontextmanager
 from pathlib import Path
 
 from fastapi import Depends, FastAPI, File, Form, HTTPException, Request, UploadFile
-from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, Response
+from fastapi.responses import (
+    FileResponse,
+    HTMLResponse,
+    JSONResponse,
+    RedirectResponse,
+    Response,
+)
 from fastapi.staticfiles import StaticFiles
 
-from app import db, import_csv, terrain
+from app import courriel, db, import_csv, securite, terrain
 from app.assemblage import construire_plan, resoudre_modele
 from app.config import (
     DONNEES_DIR,
@@ -264,6 +270,64 @@ def etat(request: Request) -> dict:
 
 
 # --------------------------------------------------------------------------- #
+# Connexion (page + session par cookie signé) — le chemin normal des navigateurs
+# --------------------------------------------------------------------------- #
+def _cookie_securise(request: Request) -> bool:
+    """Cookie `Secure` dès que la requête est en HTTPS (direct ou derrière proxy de confiance)."""
+    if request.url.scheme == "https":
+        return True
+    return (
+        get_reglages().proxy_confiance
+        and request.headers.get("X-Forwarded-Proto", "").lower() == "https"
+    )
+
+
+@app.get("/connexion", response_class=HTMLResponse)
+def connexion_page(request: Request):
+    """Page de connexion (publique). Renvoie sur l'accueil si déjà connecté ou auth désactivée."""
+    if not auth_configuree():
+        return RedirectResponse("/", status_code=302)
+    jeton = request.cookies.get(securite.COOKIE_SESSION)
+    if jeton and securite.valider_session(jeton):
+        return RedirectResponse("/", status_code=302)
+    page = (HTML_DIR / "connexion.html").read_text(encoding="utf-8")
+    societe = db.lire_parametre("societe", "") or "GB Location"
+    page = page.replace("{{SOCIETE}}", societe).replace("{{VERSION}}", VERSION)
+    return HTMLResponse(page, headers={"Cache-Control": "no-store, must-revalidate"})
+
+
+@app.post("/connexion")
+async def connexion_envoyer(request: Request, corps: dict) -> JSONResponse:
+    """Vérifie les identifiants et pose le cookie de session (7 jours)."""
+    if not auth_configuree():
+        return JSONResponse({"ok": True})
+    identifiant = (corps.get("identifiant") or "").strip()
+    mot_de_passe = corps.get("mot_de_passe") or ""
+    if not identifiant or not mot_de_passe:
+        raise HTTPException(status_code=400, detail="Identifiant et mot de passe requis.")
+    ident, role = securite.tentative_connexion(identifiant, mot_de_passe, securite.ip_client(request))
+    reponse = JSONResponse({"ok": True, "utilisateur": ident, "role": role})
+    reponse.set_cookie(
+        securite.COOKIE_SESSION,
+        securite.creer_session(ident),
+        max_age=securite._SESSION_DUREE_S,
+        httponly=True,
+        samesite="lax",
+        secure=_cookie_securise(request),
+        path="/",
+    )
+    logger.info("AUDIT auth: connexion de %s (rôle %s)", ident, role)
+    return reponse
+
+
+@app.post("/deconnexion")
+def deconnexion() -> JSONResponse:
+    reponse = JSONResponse({"ok": True})
+    reponse.delete_cookie(securite.COOKIE_SESSION, path="/")
+    return reponse
+
+
+# --------------------------------------------------------------------------- #
 # Paramètres (marque blanche : nom de société + logo) — modification admin
 # --------------------------------------------------------------------------- #
 _LOGO_CLIENT = "logo_client.png"
@@ -307,6 +371,41 @@ def parametres_logo_defaut(request: Request) -> dict:
     (STATIC_DIR / _LOGO_CLIENT).unlink(missing_ok=True)
     logger.info("AUDIT paramètres : retour au logo par défaut par %s", utilisateur_courant(request))
     return parametres_lire()
+
+
+# --------------------------------------------------------------------------- #
+# E-mail (copie du constat au client) — configuration réservée aux administrateurs
+# --------------------------------------------------------------------------- #
+@app.get("/parametres/smtp")
+def smtp_lire(request: Request) -> dict:
+    exiger_admin(request)
+    return courriel.configuration()
+
+
+@app.post("/parametres/smtp")
+async def smtp_ecrire(request: Request, corps: dict) -> dict:
+    exiger_admin(request)
+    courriel.enregistrer(corps)
+    logger.info("AUDIT paramètres : configuration e-mail modifiée par %s", utilisateur_courant(request))
+    return courriel.configuration()
+
+
+@app.post("/parametres/smtp/test")
+async def smtp_test(request: Request, corps: dict) -> dict:
+    exiger_admin(request)
+    destinataire = (corps.get("destinataire") or "").strip()
+    if "@" not in destinataire:
+        raise HTTPException(status_code=400, detail="Adresse e-mail de test invalide.")
+    societe = db.lire_parametre("societe", "") or "GB Location"
+    try:
+        courriel.envoyer(
+            destinataire,
+            f"Test — États des lieux {societe}",
+            "Ceci est un message de test : la configuration e-mail fonctionne.\n",
+        )
+    except Exception as exc:  # noqa: BLE001 — remonter la cause exacte à l'écran
+        raise HTTPException(status_code=502, detail=f"Échec de l'envoi : {exc}") from exc
+    return {"ok": True}
 
 
 # --------------------------------------------------------------------------- #
@@ -582,19 +681,70 @@ def manifest_pwa() -> JSONResponse:
     """Manifeste PWA : « Ajouter à l'écran d'accueil » sur téléphone = icône type application."""
     societe = db.lire_parametre("societe", "") or "Etat des lieux"
     return JSONResponse({
+        "id": "/",
         "name": f"Etats des lieux — {societe}",
         "short_name": "Etats des lieux",
         "start_url": "/",
+        "scope": "/",
         "display": "standalone",
         "background_color": "#060a12",
         "theme_color": "#0E1A14",
-        "icons": [{"src": "/static/logo.png", "sizes": "512x512", "type": "image/png", "purpose": "any"}],
+        "icons": [
+            {"src": "/static/icone-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any"},
+            {"src": "/static/icone-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any"},
+        ],
     })
+
+
+_SW_JS = """
+// Service worker — interface disponible même en réseau instable (chantier).
+const CACHE = 'gb-VERSION';
+const STATIQUES = ['/static/logo.png', '/static/icone-192.png', '/static/icone-512.png'];
+self.addEventListener('install', (e) => {
+  e.waitUntil(caches.open(CACHE).then((c) => c.addAll(STATIQUES)).then(() => self.skipWaiting()));
+});
+self.addEventListener('activate', (e) => {
+  e.waitUntil(caches.keys()
+    .then((cles) => Promise.all(cles.filter((k) => k !== CACHE).map((k) => caches.delete(k))))
+    .then(() => self.clients.claim()));
+});
+self.addEventListener('fetch', (e) => {
+  const url = new URL(e.request.url);
+  if (e.request.method !== 'GET' || url.origin !== location.origin) return;
+  // Pages : réseau d'abord (toujours à jour), cache en secours si coupure.
+  if (e.request.mode === 'navigate') {
+    e.respondWith(fetch(e.request).then((r) => {
+      const copie = r.clone();
+      caches.open(CACHE).then((c) => c.put(e.request, copie));
+      return r;
+    }).catch(() => caches.match(e.request)));
+    return;
+  }
+  // Statiques : cache d'abord (rapide), réseau en secours.
+  if (url.pathname.startsWith('/static/')) {
+    e.respondWith(caches.match(e.request).then((r) => r || fetch(e.request).then((rep) => {
+      const copie = rep.clone();
+      caches.open(CACHE).then((c) => c.put(e.request, copie));
+      return rep;
+    })));
+  }
+});
+"""
+
+
+@app.get("/sw.js")
+def service_worker() -> Response:
+    """Service worker (public) — le cache est versionné par la version de l'application."""
+    return Response(
+        _SW_JS.replace("VERSION", VERSION),
+        media_type="application/javascript",
+        headers={"Cache-Control": "no-store, must-revalidate"},
+    )
 
 
 @app.get("/mobile-infos")
 def mobile_infos(request: Request) -> dict:
-    """Infos de connexion mobile (admin) : état du réglage, adresses du poste, port."""
+    """Infos d'accès à distance (admin) : adresse publique configurée + adresses du poste."""
     exiger_admin(request)
     import socket
 
@@ -607,10 +757,24 @@ def mobile_infos(request: Request) -> dict:
     except OSError:
         pass
     return {
+        "adresse_publique": db.lire_parametre("adresse_publique", "") or "",
         "actif": (db.lire_parametre("acces_mobile", "0") == "1"),
         "adresses": adresses,
         "port": 8742,
     }
+
+
+@app.post("/mobile-adresse")
+async def mobile_adresse(request: Request, corps: dict) -> dict:
+    """Enregistre l'adresse publique de l'application (ex. https://app.gb-location.fr)."""
+    exiger_admin(request)
+    adresse = (corps.get("adresse") or "").strip().rstrip("/")
+    if adresse and not (adresse.startswith("https://") or adresse.startswith("http://")):
+        raise HTTPException(status_code=400, detail="L'adresse doit commencer par https://")
+    db.ecrire_parametre("adresse_publique", adresse)
+    logger.info("AUDIT accès distant : adresse publique = %s par %s", adresse or "(effacée)",
+                utilisateur_courant(request))
+    return {"adresse_publique": adresse}
 
 
 @app.post("/mobile-acces")
@@ -624,20 +788,21 @@ async def mobile_acces(request: Request, corps: dict) -> dict:
 
 @app.get("/mobile-qr")
 def mobile_qr(request: Request) -> Response:
-    """QR code (SVG) de l'adresse à ouvrir sur le téléphone — admin uniquement."""
+    """QR code (SVG) de l'adresse à ouvrir sur le téléphone — admin uniquement.
+
+    Encode l'adresse publique si elle est configurée, sinon l'adresse du poste (réseau local).
+    """
     exiger_admin(request)
     infos = mobile_infos(request)
-    if not infos["adresses"]:
+    if not infos["adresse_publique"] and not infos["adresses"]:
         raise HTTPException(status_code=404, detail="Adresse réseau introuvable.")
     import io
 
     import qrcode
     import qrcode.image.svg
 
-    img = qrcode.make(
-        f"http://{infos['adresses'][0]}:{infos['port']}",
-        image_factory=qrcode.image.svg.SvgPathImage,
-    )
+    cible = infos["adresse_publique"] or f"http://{infos['adresses'][0]}:{infos['port']}"
+    img = qrcode.make(cible, image_factory=qrcode.image.svg.SvgPathImage)
     tampon = io.BytesIO()
     img.save(tampon)
     return Response(content=tampon.getvalue(), media_type="image/svg+xml")
@@ -685,7 +850,7 @@ async def constat_photo(job_id: str, nom: str, fichier: UploadFile = File(...)) 
 
 
 @app.post("/terrain/{job_id}/{nom}/signature")
-async def constat_signature(job_id: str, nom: str, corps: dict) -> dict:
+async def constat_signature(job_id: str, nom: str, corps: dict, request: Request) -> dict:
     document, dossier = _contexte_constat(job_id, nom)
     image = corps.get("image") or ""
     prefixe = "data:image/png;base64,"
@@ -693,12 +858,27 @@ async def constat_signature(job_id: str, nom: str, corps: dict) -> dict:
         raise HTTPException(status_code=400, detail="Signature invalide.")
     import base64
 
+    signataire = (corps.get("signataire") or "").strip()
+    fonction = (corps.get("fonction") or "").strip()
     try:
         png = base64.b64decode(image[len(prefixe):])
-        terrain.enregistrer_signature(dossier, png, corps.get("signataire") or "", document=document)
+        empreinte = terrain.enregistrer_signature(
+            dossier, png, signataire, document=document, fonction=fonction
+        )
     except Exception as exc:  # noqa: BLE001
         raise HTTPException(status_code=400, detail=f"Signature illisible : {exc}") from exc
-    logger.info("AUDIT constat signé : %s (%s)", nom, job_id)
+    # Dossier de preuve : l'événement est journalisé en base (horodaté), avec l'empreinte
+    # du document signé, l'agent présent et l'IP — opposable en cas de contestation.
+    infos = db.infos_job(job_id)
+    db.journaliser(
+        "signature",
+        f"Constat signé : {nom} — signataire « {signataire} »"
+        + (f" ({fonction})" if fonction else "")
+        + f", agent {utilisateur_courant(request)}, IP {securite.ip_client(request)}"
+        + (f", SHA-256 {empreinte}" if empreinte else ""),
+        client_id=infos.get("client_id"),
+    )
+    logger.info("AUDIT constat signé : %s (%s) par %s", nom, job_id, utilisateur_courant(request))
     return terrain.charger_constat(document, None, dossier)
 
 
@@ -724,6 +904,54 @@ def constat_piece(job_id: str, nom: str, piece: str) -> FileResponse:
         raise HTTPException(status_code=404, detail="Pièce introuvable.")
     media = "application/pdf" if cible.suffix == ".pdf" else "image/png" if cible.suffix == ".png" else "image/jpeg"
     return FileResponse(cible, filename=base_piece, media_type=media)
+
+
+@app.post("/terrain/{job_id}/{nom}/envoyer")
+async def constat_envoyer(job_id: str, nom: str, corps: dict, request: Request) -> dict:
+    """Envoie la copie du constat au client par e-mail (SMTP) — depuis n'importe où.
+
+    Pièce maîtresse du dossier de preuve : le client reçoit immédiatement le PDF signé
+    et l'empreinte SHA-256 du document — le contenu est figé de manière opposable.
+    """
+    destinataire = (corps.get("destinataire") or "").strip()
+    if "@" not in destinataire:
+        raise HTTPException(status_code=400, detail="Adresse e-mail du client invalide.")
+    document, dossier = _contexte_constat(job_id, nom)
+    infos = db.infos_job(job_id)
+    societe = db.lire_parametre("societe", "") or "GB Location"
+    sous_titre = " · ".join(x for x in (infos.get("client"), infos.get("chantier")) if x)
+    pdf = terrain.generer_pdf(dossier, titre=Path(nom).stem, sous_titre=sous_titre, societe=societe)
+
+    import json as _json
+
+    constat_js = dossier / "constat.json"
+    donnees = _json.loads(constat_js.read_text(encoding="utf-8")) if constat_js.exists() else {}
+    lignes = [
+        "Bonjour,",
+        "",
+        f"Veuillez trouver ci-joint le constat d'état des lieux — {sous_titre or Path(nom).stem}.",
+    ]
+    if donnees.get("signataire"):
+        qui = donnees["signataire"] + (f" ({donnees['fonction']})" if donnees.get("fonction") else "")
+        lignes.append(f"Signé par {qui} le {donnees.get('signe_le', '')}.")
+    if donnees.get("empreinte_sha256"):
+        lignes += ["", f"Empreinte SHA-256 du document signé : {donnees['empreinte_sha256']}"]
+    lignes += ["", f"Cordialement,\n{societe}"]
+    try:
+        courriel.envoyer(
+            destinataire,
+            f"État des lieux — {infos.get('chantier') or Path(nom).stem}",
+            "\n".join(lignes),
+            pieces=[pdf],
+        )
+    except Exception as exc:  # noqa: BLE001 — remonter la cause exacte à l'écran
+        raise HTTPException(status_code=502, detail=f"Échec de l'envoi : {exc}") from exc
+    db.journaliser(
+        "envoi",
+        f"Constat envoyé : {nom} → {destinataire} par {utilisateur_courant(request)}",
+        client_id=infos.get("client_id"),
+    )
+    return {"ok": True, "mode": "email"}
 
 
 @app.post("/terrain/{job_id}/{nom}/partager")
