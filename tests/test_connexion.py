@@ -95,6 +95,34 @@ def test_session_compte_desactive_refusee():
     assert valider_session(jeton) is None
 
 
+def test_changement_mot_de_passe_revoque_les_sessions():
+    uid = db.creer_utilisateur("z", "Z", hacher("motdepasse8"), "admin")
+    jeton = creer_session("z")
+    assert valider_session(jeton) == ("z", "admin")
+    db.modifier_utilisateur(uid, hash_=hacher("nouveaumotdepasse"))
+    assert valider_session(jeton) is None  # le sceau ne correspond plus
+
+
+def test_chauffeur_peut_se_deconnecter():
+    _comptes()
+    tc = TestClient(app)
+    tc.post("/connexion", json={"identifiant": "chauffeur1", "mot_de_passe": "motdepasse8"})
+    assert tc.post("/deconnexion").status_code == 200  # /deconnexion n'est pas gated
+    assert tc.get("/etat").status_code == 401
+
+
+def test_constat_verrouille_apres_signature(tmp_path):
+    from app import terrain
+
+    doc = tmp_path / "etat.xlsx"
+    shutil.copy(MODELE, doc)
+    dossier = tmp_path / "constat"
+    dossier.mkdir()
+    terrain.enregistrer_signature(dossier, PNG, "M. Client", document=doc, accord=True)
+    with __import__("pytest").raises(terrain.ConstatSigne):
+        terrain.enregistrer_constat(doc, None, [{"ligne": 10, "debut": "OK", "fin": ""}], dossier)
+
+
 # ---------------------------------------------------------------- proxy / IP
 
 class _Req:
@@ -109,11 +137,13 @@ def test_ip_client_ignore_les_entetes_sans_proxy_de_confiance(monkeypatch):
     assert ip_client(_Req({"CF-Connecting-IP": "1.2.3.4"})) == "10.0.0.9"
 
 
-def test_ip_client_lit_les_entetes_derriere_proxy(monkeypatch):
+def test_ip_client_prend_le_dernier_maillon_non_falsifiable(monkeypatch):
     monkeypatch.setenv("GB_PROXY_CONFIANCE", "1")
     get_reglages.cache_clear()
-    assert ip_client(_Req({"CF-Connecting-IP": "1.2.3.4"})) == "1.2.3.4"
-    assert ip_client(_Req({"X-Forwarded-For": "5.6.7.8, 9.9.9.9"})) == "5.6.7.8"
+    # Caddy ajoute la vraie IP en fin de chaîne : c'est le DERNIER maillon qui fait foi.
+    assert ip_client(_Req({"X-Forwarded-For": "1.1.1.1, 9.9.9.9"})) == "9.9.9.9"
+    # CF-Connecting-IP (falsifiable derrière Caddy) est IGNORÉ.
+    assert ip_client(_Req({"CF-Connecting-IP": "6.6.6.6"})) == "10.0.0.9"
     get_reglages.cache_clear()
 
 
@@ -163,9 +193,14 @@ def test_smtp_reserve_aux_admins_et_sans_fuite_du_mot_de_passe():
     assert r.status_code == 200
     d = r.json()
     assert d["configure"] is True and "secret" not in str(d)
+    # Le mot de passe SMTP vit dans le coffre local (hors base/sauvegardes), pas dans la base.
+    from app import coffre
+
+    assert coffre.lire("smtp_mdp") == "secret"
+    assert (db.lire_parametre("smtp_mdp") or "") == ""
     # Un enregistrement sans mot de passe conserve l'existant.
     courriel.enregistrer({"hote": "smtp.exemple.fr"})
-    assert db.lire_parametre("smtp_mdp") == "secret"
+    assert coffre.lire("smtp_mdp") == "secret"
 
 
 def test_envoi_constat_exige_configuration_et_adresse():

@@ -14,9 +14,9 @@ DOMAINE="${1:-}"
 CIBLE=/opt/gb-etats
 SRC="$(cd "$(dirname "$0")/.." && pwd)"
 
-echo "== 1/6 Paquets système (python, caddy) =="
+echo "== 1/7 Paquets système (python, caddy) =="
 apt-get update -qq
-apt-get install -y -qq python3 python3-venv sqlite3 curl debian-keyring debian-archive-keyring apt-transport-https
+apt-get install -y -qq python3 python3-venv sqlite3 curl rsync gnupg debian-keyring debian-archive-keyring apt-transport-https
 if ! command -v caddy >/dev/null; then
   curl -1sLf 'https://dl.cloudsmith.io/public/caddy/stable/gpg.key' \
     | gpg --dearmor -o /usr/share/keyrings/caddy-stable-archive-keyring.gpg
@@ -25,19 +25,22 @@ if ! command -v caddy >/dev/null; then
   apt-get update -qq && apt-get install -y -qq caddy
 fi
 
-echo "== 2/6 Compte de service + copie de l'application =="
+echo "== 2/7 Compte de service + copie de l'application =="
 id gbapp >/dev/null 2>&1 || useradd --system --create-home --shell /usr/sbin/nologin gbapp
 mkdir -p "$CIBLE"
+# runtime/ (base + documents) et .env (clé API) ne sont JAMAIS touchés par une (ré)installation.
 rsync -a --delete \
   --exclude '.venv' --exclude '.git' --exclude 'dist' --exclude 'build' \
+  --exclude 'runtime' --exclude '.env' \
+  --filter 'protect runtime/***' --filter 'protect .env' \
   "$SRC/" "$CIBLE/"
 
-echo "== 3/6 Environnement Python =="
+echo "== 3/7 Environnement Python =="
 python3 -m venv "$CIBLE/.venv"
 "$CIBLE/.venv/bin/pip" install --quiet --upgrade pip
 "$CIBLE/.venv/bin/pip" install --quiet -r "$CIBLE/requirements.txt"
 
-echo "== 4/6 Fichier .env =="
+echo "== 4/7 Fichier .env =="
 if [ ! -f "$CIBLE/.env" ]; then
   cat > "$CIBLE/.env" <<'ENV'
 # --- À COMPLÉTER ---
@@ -52,14 +55,26 @@ fi
 chown -R gbapp:gbapp "$CIBLE"
 chmod 600 "$CIBLE/.env"
 
-echo "== 5/6 Services (application + HTTPS) =="
+echo "== 5/7 Compte administrateur (JAMAIS d'accès public sans authentification) =="
+# L'app est OUVERTE tant qu'aucun compte n'existe : on impose un admin AVANT de la publier.
+if sudo -u gbapp "$CIBLE/.venv/bin/python" "$CIBLE/scripts/creer_admin.py" --verifier; then
+  echo "  Un compte administrateur existe déjà (base migrée) — étape ignorée."
+else
+  echo "  Aucun compte : créons le compte administrateur maintenant."
+  read -rp "  Identifiant administrateur : " ADMIN_ID
+  read -rsp "  Mot de passe (8 caractères min.) : " ADMIN_PW; echo
+  sudo -u gbapp "$CIBLE/.venv/bin/python" "$CIBLE/scripts/creer_admin.py" "$ADMIN_ID" "$ADMIN_PW"
+fi
+
+echo "== 6/7 Services (application + HTTPS) =="
 cp "$CIBLE/deploy/gb-etats.service" /etc/systemd/system/gb-etats.service
 sed "s/app\.gb-location\.fr/$DOMAINE/" "$CIBLE/deploy/Caddyfile" > /etc/caddy/Caddyfile
 systemctl daemon-reload
-systemctl enable --now gb-etats
+systemctl enable gb-etats
+systemctl restart gb-etats          # restart (pas start) : applique bien le nouveau code en cas de MAJ
 systemctl reload caddy || systemctl restart caddy
 
-echo "== 6/6 Sauvegarde quotidienne externe =="
+echo "== 7/7 Sauvegarde quotidienne externe =="
 cp "$CIBLE/deploy/sauvegarde.sh" /usr/local/bin/gb-sauvegarde
 chmod +x /usr/local/bin/gb-sauvegarde
 cat > /etc/cron.d/gb-etats <<'CRON'

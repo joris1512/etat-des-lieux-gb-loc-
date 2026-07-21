@@ -103,13 +103,20 @@ _SESSION_DUREE_S = 7 * 24 * 3600  # 7 jours : le chauffeur ne retape pas son mot
 
 
 def _secret_session() -> bytes:
-    """Secret de signature des sessions, généré une fois et conservé en base."""
-    from app import db
+    """Secret de signature des sessions, dans le coffre local (hors base/sauvegardes).
 
-    secret = db.lire_parametre("secret_session")
-    if not secret:
-        secret = secrets.token_hex(32)
-        db.ecrire_parametre("secret_session", secret)
+    Migre l'ancien emplacement (base) le cas échéant, puis purge la base de ce secret.
+    """
+    from app import coffre, db
+
+    secret = coffre.lire("session")
+    if secret:
+        return secret.encode("utf-8")
+    ancien = db.lire_parametre("secret_session")  # migration depuis les versions ≤ 2.5.0
+    secret = ancien or secrets.token_hex(32)
+    coffre.ecrire("session", secret)
+    if ancien:
+        db.ecrire_parametre("secret_session", "")  # ne plus laisser le secret dans la base
     return secret.encode("utf-8")
 
 
@@ -117,24 +124,48 @@ def _signer(donnees: str) -> str:
     return hmac.new(_secret_session(), donnees.encode("utf-8"), hashlib.sha256).hexdigest()
 
 
+def _sceau_compte(identifiant: str) -> str:
+    """Empreinte courte liée au mot de passe du compte : intégrée au jeton, elle **révoque**
+    toutes les sessions dès que le mot de passe change (le sceau ne correspond plus)."""
+    from app import db
+
+    try:
+        compte = db.lire_utilisateur(identifiant)
+    except Exception:  # noqa: BLE001
+        compte = None
+    base = compte["hash"] if compte else ""
+    if not base:
+        r = get_reglages()
+        if identifiant == r.utilisateur:
+            base = r.mot_de_passe_hash or r.mot_de_passe or ""
+    return hashlib.sha256(base.encode("utf-8") + _secret_session()).hexdigest()[:16]
+
+
 def creer_session(identifiant: str) -> str:
-    """Jeton de session : b64(identifiant).expiration.signature — vérifiable sans état serveur."""
+    """Jeton de session : b64(id).expiration.sceau.signature — vérifiable sans état serveur.
+
+    Le `sceau` lie la session au mot de passe : le réinitialiser invalide les sessions en cours.
+    """
     ident_b64 = base64.urlsafe_b64encode(identifiant.encode("utf-8")).decode("ascii")
     expiration = str(int(time.time()) + _SESSION_DUREE_S)
-    corps = f"{ident_b64}.{expiration}"
+    corps = f"{ident_b64}.{expiration}.{_sceau_compte(identifiant)}"
     return f"{corps}.{_signer(corps)}"
 
 
 def valider_session(jeton: str) -> tuple[str, str] | None:
-    """Renvoie (identifiant, rôle) si le jeton est signé, non expiré et le compte toujours actif."""
+    """Renvoie (identifiant, rôle) si le jeton est signé, non expiré, le sceau (mot de passe)
+    inchangé et le compte toujours actif."""
     try:
-        ident_b64, expiration, signature = jeton.split(".")
-        if not hmac.compare_digest(signature, _signer(f"{ident_b64}.{expiration}")):
+        ident_b64, expiration, sceau, signature = jeton.split(".")
+        if not hmac.compare_digest(signature, _signer(f"{ident_b64}.{expiration}.{sceau}")):
             return None
         if time.time() > int(expiration):
             return None
         identifiant = base64.urlsafe_b64decode(ident_b64.encode("ascii")).decode("utf-8")
     except (ValueError, TypeError):
+        return None
+    # Sceau : rejette la session si le mot de passe a changé depuis son émission.
+    if not hmac.compare_digest(sceau, _sceau_compte(identifiant)):
         return None
     from app import db
 
@@ -152,18 +183,20 @@ def valider_session(jeton: str) -> tuple[str, str] | None:
 
 
 def ip_client(request: Request) -> str:
-    """IP réelle du client — lit les en-têtes de proxy UNIQUEMENT si GB_PROXY_CONFIANCE=1.
+    """IP réelle du client — lit X-Forwarded-For UNIQUEMENT si GB_PROXY_CONFIANCE=1.
 
-    Derrière Cloudflare/Caddy, request.client.host est l'IP du proxy : sans ce correctif,
+    Derrière Caddy (kit VPS), request.client.host est l'IP du proxy : sans ce correctif,
     l'anti-force-brute bloquerait TOUT LE MONDE dès qu'un robot échoue 8 fois.
+
+    ⚠️ On lit le DERNIER maillon de X-Forwarded-For : avec exactement un proxy de confiance
+    en amont (Caddy, configuré pour réécrire l'en-tête — voir deploy/Caddyfile), c'est la seule
+    valeur non falsifiable par le client. On n'honore PAS CF-Connecting-IP (en-tête propriétaire
+    Cloudflare que Caddy ne pose ni ne retire : il serait librement injectable par l'attaquant).
     """
     if get_reglages().proxy_confiance:
-        cf = request.headers.get("CF-Connecting-IP")
-        if cf:
-            return cf.strip()
         xff = request.headers.get("X-Forwarded-For")
         if xff:
-            return xff.split(",")[0].strip()
+            return xff.split(",")[-1].strip()
     return request.client.host if request.client else "inconnu"
 
 
@@ -230,9 +263,9 @@ def tentative_connexion(identifiant: str, mot_de_passe: str, ip: str) -> tuple[s
     )
 
 
-# Chemins servis SANS authentification : la page de connexion elle-même, le manifeste PWA
-# (nom + logo uniquement) et le service worker (code public de l'interface).
-_CHEMINS_PUBLICS = ("/connexion", "/manifest.json", "/sw.js")
+# Chemins servis SANS authentification : la page de connexion, la déconnexion (doit toujours
+# fonctionner, y compris pour un chauffeur cloisonné), le manifeste PWA et le service worker.
+_CHEMINS_PUBLICS = ("/connexion", "/deconnexion", "/manifest.json", "/sw.js")
 
 
 def _valide_et_gate_chauffeur(request: Request, identifiant: str, role: str) -> None:

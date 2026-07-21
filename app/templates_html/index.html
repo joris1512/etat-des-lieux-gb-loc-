@@ -574,11 +574,12 @@
           <button type="button" class="btn btn-primary" id="ct-envoyer">Envoyer la copie signée</button>
           <span class="hint">PDF + empreinte du document — preuve horodatée pour les deux parties.</span>
         </div>
+        <div id="ct-verrou" class="hint" style="display:none;margin-top:14px;padding:10px 14px;border-radius:10px;background:rgba(37,163,90,.1);border:1px solid rgba(37,163,90,.3)">Constat signé — les relevés sont verrouillés (preuve horodatée). Pour corriger, faites re-signer le client.</div>
         <div class="actions" style="margin-top:22px;flex-wrap:wrap">
           <button type="button" class="btn btn-primary" id="ct-save">Enregistrer le constat</button>
           <button type="button" class="btn btn-ghost" id="ct-pdf">Générer le PDF</button>
           <a class="btn btn-ghost" id="ct-voir-pdf" style="display:none" target="_blank">Voir le PDF</a>
-          <button type="button" class="btn btn-red" id="ct-partager">Brouillon Outlook (poste bureau)</button>
+          <button type="button" class="btn btn-ghost" id="ct-partager" style="display:none">Brouillon Outlook (poste bureau)</button>
         </div>
       </div>
     </div>
@@ -884,9 +885,27 @@
       $('#ct-signe').textContent=d.signature?`Signé${d.signataire?' par '+d.signataire:''}${d.fonction?' ('+d.fonction+')':''} ✔`:'';
       if(d.signataire)$('#ct-signataire').value=d.signataire;
       if(d.fonction)$('#ct-fonction').value=d.fonction;
+      // Constat signé = preuve figée : on verrouille les relevés et la re-signature.
+      const verrou=!!d.signe;
+      $('#ct-lignes').querySelectorAll('input').forEach(i=>i.disabled=verrou);
+      ['#ct-save','#ct-signer','#ct-signataire','#ct-fonction','#ct-accord','#ct-effacer'].forEach(s=>{const el=$(s);if(el)el.disabled=verrou;});
+      const av=$('#ct-verrou');if(av)av.style.display=verrou?'block':'none';
       const pdfBtn=$('#ct-voir-pdf');
       if(d.pdf){pdfBtn.style.display='';pdfBtn.href=`/terrain-fichier/${encodeURIComponent(ctx.job)}/${encodeURIComponent(ctx.nom)}/constat.pdf`;}else pdfBtn.style.display='none';
     }
+    /* Collecte les relevés saisis à l'écran (partagé entre « Enregistrer » et « Signer »). */
+    function collecterLignes(){
+      const map={};
+      $('#ct-lignes').querySelectorAll('[data-ct-l]').forEach(i=>{const l=i.dataset.ctL;map[l]=map[l]||{ligne:parseInt(l,10),libelle:'',debut:'',fin:''};map[l][i.dataset.ctK]=i.value;});
+      $('#ct-lignes').querySelectorAll('tbody tr').forEach(tr=>{const inp=tr.querySelector('[data-ct-l]');if(inp)map[inp.dataset.ctL].libelle=tr.cells[0].textContent;});
+      return Object.values(map);
+    }
+    async function enregistrerLignes(){
+      const r=await fetch(ctUrl(),{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({lignes:collecterLignes()})});
+      const d=await r.json();if(!r.ok)throw new Error(d.detail||'Erreur');return d;
+    }
+    // Le brouillon Outlook n'a de sens que sur le poste de bureau (Windows local) : masqué à distance.
+    (function(){const local=['localhost','127.0.0.1'].includes(location.hostname);const b=$('#ct-partager');if(b&&local)b.style.display='';})();
     async function ouvrirConstat(dlUrl){
       const m=dlUrl.match(/^\/telecharger\/([^/]+)\/(.+)$/);if(!m)return;
       ctx={job:decodeURIComponent(m[1]),nom:decodeURIComponent(m[2])};
@@ -896,10 +915,7 @@
     document.addEventListener('click',e=>{const o=e.target.closest&&e.target.closest('[data-constat]');if(o){e.preventDefault();ouvrirConstat(o.dataset.constat);}});
     $('#ct-fermer').addEventListener('click',()=>{$('#constat-overlay').style.display='none';});
     $('#ct-save').addEventListener('click',async()=>{
-      const map={};$('#ct-lignes').querySelectorAll('[data-ct-l]').forEach(i=>{const l=i.dataset.ctL;map[l]=map[l]||{ligne:parseInt(l,10),libelle:'',debut:'',fin:''};map[l][i.dataset.ctK]=i.value;});
-      // récupère les libellés affichés pour le PDF
-      $('#ct-lignes').querySelectorAll('tbody tr').forEach(tr=>{const inp=tr.querySelector('[data-ct-l]');if(inp)map[inp.dataset.ctL].libelle=tr.cells[0].textContent;});
-      try{const r=await fetch(ctUrl(),{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({lignes:Object.values(map)})});const d=await r.json();if(!r.ok)throw new Error(d.detail||'Erreur');toast('Constat enregistré dans le document Excel.','ok');renderConstat(d);}
+      try{const d=await enregistrerLignes();toast('Constat enregistré dans le document Excel.','ok');renderConstat(d);}
       catch(e){toast(e.message,'bad');}
     });
     /* Compression côté navigateur : les photos de chantier partent en secondes même en 4G. */
@@ -915,9 +931,11 @@
       }catch(_){return f;}
     }
     $('#ct-photo').addEventListener('change',async()=>{
+      let ok=0,ko=0;
       for(const f of $('#ct-photo').files){const fd=new FormData();fd.append('fichier',await compresserPhoto(f));
-        try{const r=await fetch(ctUrl('/photo'),{method:'POST',body:fd});const d=await r.json();if(!r.ok)throw new Error(d.detail||'Erreur');renderConstat(d);}catch(e){toast(e.message,'bad');}}
-      $('#ct-photo').value='';toast('Photo(s) ajoutée(s).','ok');
+        try{const r=await fetch(ctUrl('/photo'),{method:'POST',body:fd});const d=await r.json();if(!r.ok)throw new Error(d.detail||'Erreur');renderConstat(d);ok++;}catch(e){ko++;toast(e.message,'bad');}}
+      $('#ct-photo').value='';
+      if(ok)toast(`${ok} photo(s) ajoutée(s)${ko?` · ${ko} en échec`:''}.`,'ok');
     });
     /* Canvas de signature (souris + doigt/stylet) */
     const cv=$('#ct-canvas'),cctx=cv.getContext('2d');let trace=false,vide=true;
@@ -931,8 +949,14 @@
       if(vide){toast('Faites signer dans le cadre blanc.','bad');return;}
       if(!$('#ct-signataire').value.trim()){toast('Indiquez le nom du signataire (élément de preuve).','bad');return;}
       if(!$('#ct-accord').checked){toast('Le signataire doit cocher « lu et approuvé ».','bad');return;}
-      try{const r=await fetch(ctUrl('/signature'),{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({image:cv.toDataURL('image/png'),signataire:$('#ct-signataire').value,fonction:$('#ct-fonction').value})});const d=await r.json();if(!r.ok)throw new Error(d.detail||'Erreur');toast('Signature enregistrée dans le document — preuve horodatée constituée.','ok');renderConstat(d);}
-      catch(e){toast(e.message,'bad');}
+      try{
+        // On fige d'abord les relevés dans le document, PUIS on signe : l'empreinte porte donc
+        // sur le document complet (relevés inclus) et le constat est verrouillé ensuite.
+        await enregistrerLignes();
+        const r=await fetch(ctUrl('/signature'),{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({image:cv.toDataURL('image/png'),signataire:$('#ct-signataire').value,fonction:$('#ct-fonction').value,accord:$('#ct-accord').checked})});
+        const d=await r.json();if(!r.ok)throw new Error(d.detail||'Erreur');
+        toast('Signature enregistrée dans le document — preuve horodatée constituée.','ok');renderConstat(d);
+      }catch(e){toast(e.message,'bad');}
     });
     $('#ct-envoyer').addEventListener('click',async()=>{
       const dest=$('#ct-email').value.trim();

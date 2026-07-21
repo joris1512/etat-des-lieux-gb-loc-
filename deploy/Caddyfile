@@ -2,7 +2,14 @@
 # Remplacez app.gb-location.fr par votre domaine, puis : systemctl reload caddy
 app.gb-location.fr {
 	encode gzip
-	reverse_proxy 127.0.0.1:8000
+
+	# Réécrit X-Forwarded-For avec la VRAIE IP du client (écrase toute valeur envoyée par
+	# le client) et supprime l'en-tête Cloudflare qui n'a pas lieu d'être ici : l'application
+	# lit le dernier maillon de X-Forwarded-For pour l'anti-force-brute et le journal de preuve.
+	reverse_proxy 127.0.0.1:8000 {
+		header_up X-Forwarded-For {http.request.remote.host}
+		header_up -CF-Connecting-IP
+	}
 
 	header {
 		Strict-Transport-Security "max-age=31536000"

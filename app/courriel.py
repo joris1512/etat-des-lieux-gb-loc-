@@ -12,7 +12,7 @@ import smtplib
 from email.message import EmailMessage
 from pathlib import Path
 
-from app import db
+from app import coffre, db
 
 _DELAI_S = 25
 
@@ -38,8 +38,9 @@ def enregistrer(corps: dict) -> None:
     securite = str(corps.get("securite") or "tls").strip().lower()
     db.ecrire_parametre("smtp_securite", securite if securite in ("tls", "ssl") else "tls")
     mdp = corps.get("mdp")
-    if mdp:  # jamais écrasé par un champ laissé vide
-        db.ecrire_parametre("smtp_mdp", str(mdp))
+    if mdp:  # jamais écrasé par un champ laissé vide ; stocké hors base (coffre local)
+        coffre.ecrire("smtp_mdp", str(mdp))
+        db.ecrire_parametre("smtp_mdp", "")  # purge d'un éventuel ancien stockage en base
 
 
 def envoyer(destinataire: str, sujet: str, corps: str, pieces: list[Path] | None = None) -> None:
@@ -63,7 +64,7 @@ def envoyer(destinataire: str, sujet: str, corps: str, pieces: list[Path] | None
             type_p, sous_type = "application", "octet-stream"
         message.add_attachment(donnees, maintype=type_p, subtype=sous_type, filename=piece.name)
 
-    mdp = db.lire_parametre("smtp_mdp", "") or ""
+    mdp = coffre.lire("smtp_mdp") or db.lire_parametre("smtp_mdp", "") or ""
     if cfg["securite"] == "ssl":
         with smtplib.SMTP_SSL(cfg["hote"], cfg["port"], timeout=_DELAI_S) as smtp:
             if cfg["utilisateur"]:

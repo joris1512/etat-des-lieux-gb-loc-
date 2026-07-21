@@ -55,6 +55,8 @@ sudo bash /tmp/gb/deploy/installer_vps.sh app.gb-location.fr
 
 Le script installe tout : Python, l'application (service qui redémarre tout seul), **Caddy**
 (HTTPS automatique Let's Encrypt — aucun certificat à gérer), et la sauvegarde quotidienne.
+Il **demande de créer le compte administrateur** pendant l'installation : l'application n'est
+donc **jamais publiée sans authentification** (identifiant + mot de passe choisis à cet instant).
 
 Dernière étape : renseigner la clé API dans `/opt/gb-etats/.env`
 (`sudo nano /opt/gb-etats/.env`) puis `sudo systemctl restart gb-etats`.
@@ -79,6 +81,10 @@ sudo chown -R gbapp:gbapp /opt/gb-etats/runtime
 sudo systemctl start gb-etats
 ```
 
+> Cette migration remplace la base du serveur par celle du bureau : **les comptes existants
+> (dont les vôtres) reprennent le dessus** sur l'admin créé à l'installation — c'est voulu.
+> Si vous ne migrez pas de base, gardez l'admin créé pendant l'installation.
+
 > ⚠️ À partir de là, **tout le monde travaille sur `https://app.gb-location.fr`** (bureau
 > compris, via le navigateur — un raccourci sur le Bureau suffit). L'ancienne application locale
 > ne doit plus servir à saisir : elle deviendrait une copie divergente. La garder comme secours.
@@ -101,7 +107,9 @@ scp -r P:\Joris\gb-etats-des-lieux debian@IP-DU-VPS:/tmp/gb    # depuis le poste
 ssh debian@IP-DU-VPS "sudo bash /tmp/gb/deploy/installer_vps.sh app.gb-location.fr"
 ```
 
-Le script réinstalle le code **sans toucher** aux données (`runtime/`) ni au `.env`.
+Le script réinstalle le code **sans toucher** aux données (`runtime/`) ni au `.env`, puis
+**redémarre le service** (`systemctl restart`) : le nouveau code est réellement appliqué.
+Le compte administrateur existant est conservé (l'étape de création est ignorée).
 
 ## 7. Sauvegardes — trois filets
 

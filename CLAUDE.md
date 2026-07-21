@@ -94,6 +94,18 @@ Routes clés : `/` (UI), `/analyser`, `/generer`, `/generer-revise`, `/telecharg
   (base + fichiers + journal ciblé par client_id), fixture pseudonymisée, rétention 8760 h alignée sur
   le registre README, écoute 127.0.0.1 par défaut, mot de passe haché (PBKDF2), logs minimisés.
   (77 tests verts.)
+- v2.4 : **Espace chauffeurs** — rôle `chauffeur` (allowlist de chemins dans `exiger_auth`, vue unique
+  « Mes constats »), **signature insérée DANS le xlsx** (`patch_xlsx.inserer_image`, oneCellAnchor,
+  re-signature sans doublon), manifeste PWA, QR d'accès (`qrcode` en dépendance).
+- v2.5 : **niveau pro** — **page de connexion** (`/connexion`, sessions cookie HMAC 7 j, secret en base,
+  Basic conservé, redirection de `/`) ; **PWA complète** (icônes 192/512, `/sw.js` versionné) ; **dossier
+  de preuve de signature** (SHA-256 du xlsx à la signature, fonction du signataire, « lu et approuvé »,
+  `db.journaliser`, empreinte dans le PDF) ; **envoi SMTP au client** (`app/courriel.py`, carte Admin
+  + test) ; compression photos côté navigateur ; `GB_PROXY_CONFIANCE` (IP réelle derrière proxy) ;
+  carte « Accès à distance » (paramètre `adresse_publique` + QR) ; **kit VPS** (`deploy/` +
+  `docs/DEPLOIEMENT_VPS.md` : OVH Debian 12, Caddy HTTPS auto, systemd, sauvegardes). (144 tests verts.)
+  **Décision produit : cible = hébergement VPS français (option « pro ») ; l'accès LAN du poste bureau
+  est abandonné pour les chauffeurs (pare-feu domaine sans droits admin + chauffeurs en 4G).**
 
 **Reste à faire (prochaines briques) :**
 1. **Brancher les vrais modèles.** Les `.xls` du client (dans `P:\Joris\etat des lieux`, **originaux à ne

@@ -3,7 +3,7 @@ afin de ne jamais polluer le runtime réel (runtime/gb.db, runtime/sorties/)."""
 
 import pytest
 
-from app import db, generation, purge, securite
+from app import coffre, db, generation, purge, securite
 from app.config import get_reglages
 
 
@@ -14,6 +14,8 @@ def _isoler_runtime(tmp_path, monkeypatch):
     sorties = tmp_path / "sorties"
     monkeypatch.setattr(generation, "SORTIES_DIR", sorties)
     monkeypatch.setattr(purge, "SORTIES_DIR", sorties)
+    # Coffre à secrets (session, SMTP) isolé : pas d'écriture dans le runtime réel.
+    monkeypatch.setattr(coffre, "RUNTIME_DIR", tmp_path / "runtime")
     # Auth neutralisée par défaut : la suite ne dépend pas du .env du poste (un GB_PASSWORD
     # défini en local ne doit pas casser les tests). Les tests d'auth la réactivent eux-mêmes.
     monkeypatch.setenv("GB_PASSWORD", "")

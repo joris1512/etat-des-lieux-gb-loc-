@@ -391,7 +391,7 @@ async def smtp_ecrire(request: Request, corps: dict) -> dict:
 
 
 @app.post("/parametres/smtp/test")
-async def smtp_test(request: Request, corps: dict) -> dict:
+def smtp_test(request: Request, corps: dict) -> dict:  # def : envoi SMTP bloquant → threadpool
     exiger_admin(request)
     destinataire = (corps.get("destinataire") or "").strip()
     if "@" not in destinataire:
@@ -831,6 +831,8 @@ async def constat_enregistrer(job_id: str, nom: str, corps: dict) -> dict:
     lignes = corps.get("lignes") or []
     try:
         terrain.enregistrer_constat(document, None, lignes, dossier)
+    except terrain.ConstatSigne as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
     except Exception as exc:  # noqa: BLE001
         raise HTTPException(status_code=422, detail=f"Enregistrement impossible : {exc}") from exc
     return terrain.charger_constat(document, None, dossier)
@@ -860,10 +862,11 @@ async def constat_signature(job_id: str, nom: str, corps: dict, request: Request
 
     signataire = (corps.get("signataire") or "").strip()
     fonction = (corps.get("fonction") or "").strip()
+    accord = bool(corps.get("accord"))
     try:
         png = base64.b64decode(image[len(prefixe):])
         empreinte = terrain.enregistrer_signature(
-            dossier, png, signataire, document=document, fonction=fonction
+            dossier, png, signataire, document=document, fonction=fonction, accord=accord
         )
     except Exception as exc:  # noqa: BLE001
         raise HTTPException(status_code=400, detail=f"Signature illisible : {exc}") from exc
@@ -907,7 +910,7 @@ def constat_piece(job_id: str, nom: str, piece: str) -> FileResponse:
 
 
 @app.post("/terrain/{job_id}/{nom}/envoyer")
-async def constat_envoyer(job_id: str, nom: str, corps: dict, request: Request) -> dict:
+def constat_envoyer(job_id: str, nom: str, corps: dict, request: Request) -> dict:  # def : SMTP bloquant → threadpool
     """Envoie la copie du constat au client par e-mail (SMTP) — depuis n'importe où.
 
     Pièce maîtresse du dossier de preuve : le client reçoit immédiatement le PDF signé
@@ -997,12 +1000,21 @@ def telecharger(job_id: str, nom: str) -> FileResponse:
 
 
 def _exiger_poste_local(request: Request) -> None:
-    """N'autorise l'ouverture directe que depuis CE poste (sinon Excel s'ouvrirait sur le serveur)."""
-    hote = (request.client.host if request.client else "") or ""
-    if hote not in ("127.0.0.1", "::1", "localhost"):
+    """N'autorise les actions Windows locales (ouvrir/imprimer/Outlook) que sur le poste physique.
+
+    Ces actions s'appuient sur os.startfile / PowerShell : hors Windows (VPS Linux) ou depuis un
+    client distant (derrière Caddy), elles sont refusées proprement plutôt que de planter en 500
+    ou d'agir sur le serveur. On lit l'IP RÉELLE (securite.ip_client) pour ne pas prendre l'IP du
+    proxy pour du local.
+    """
+    import sys
+
+    hote = securite.ip_client(request)
+    local = sys.platform == "win32" and hote in ("127.0.0.1", "::1", "localhost")
+    if not local:
         raise HTTPException(
             status_code=403,
-            detail="Ouverture directe disponible uniquement sur le poste local — utilisez Télécharger.",
+            detail="Action disponible uniquement sur le poste de bureau — utilisez Télécharger ou l'envoi par e-mail.",
         )
 
 

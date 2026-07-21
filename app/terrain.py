@@ -66,8 +66,13 @@ def charger_constat(document: Path, feuille: str | None, dossier: Path) -> dict:
     js = _chemin_json(dossier)
     if js.exists():
         data = json.loads(js.read_text(encoding="utf-8"))
+        # Filet de sécurité : si les lignes n'ont pas (encore) été enregistrées, on les
+        # redétecte depuis le modèle plutôt que d'afficher un tableau vide (perte de saisie).
+        if not data.get("lignes"):
+            data["lignes"] = lignes_depuis_modele(document, feuille)
     else:
         data = {"feuille": feuille, "lignes": lignes_depuis_modele(document, feuille)}
+    data["signe"] = bool(data.get("signe_le"))
     data["photos"] = sorted(p.name for p in dossier.glob("photo-*.*"))
     data["signature"] = (dossier / "signature.png").exists()
     data["signataire"] = data.get("signataire", "")
@@ -76,8 +81,23 @@ def charger_constat(document: Path, feuille: str | None, dossier: Path) -> dict:
     return data
 
 
+class ConstatSigne(Exception):
+    """Levée quand on tente de modifier les relevés d'un constat déjà signé (preuve figée)."""
+
+
 def enregistrer_constat(document: Path, feuille: str | None, lignes: list[dict], dossier: Path) -> None:
-    """Écrit début/fin dans le document Excel (C{r}/F{r}) et persiste l'état de saisie."""
+    """Écrit début/fin dans le document Excel (C{r}/F{r}) et persiste l'état de saisie.
+
+    Refuse toute modification après signature : l'empreinte SHA-256 du dossier de preuve doit
+    rester cohérente avec le document réellement signé (sinon la preuve s'auto-invalide)."""
+    js = _chemin_json(dossier)
+    if js.exists():
+        deja = json.loads(js.read_text(encoding="utf-8"))
+        if deja.get("signe_le"):
+            raise ConstatSigne(
+                "Ce constat est déjà signé : les relevés ne peuvent plus être modifiés. "
+                "Faites re-signer le client si une correction est nécessaire."
+            )
     valeurs: dict[str, object] = {}
     for ligne in lignes:
         r = int(ligne.get("ligne", 0))
@@ -137,6 +157,7 @@ def enregistrer_signature(
     signataire: str,
     document: Path | None = None,
     fonction: str = "",
+    accord: bool = False,
 ) -> str | None:
     """Enregistre la signature + construit le DOSSIER DE PREUVE (exigé par la jurisprudence
     pour donner du poids à une signature électronique simple) : identité et fonction du
@@ -163,6 +184,7 @@ def enregistrer_signature(
     maintenant = datetime.now()
     data["signataire"] = (signataire or "").strip()
     data["fonction"] = (fonction or "").strip()
+    data["accord"] = bool(accord)
     data["signe_le"] = maintenant.strftime("%d/%m/%Y à %H:%M")
     data["signe_le_iso"] = maintenant.isoformat(timespec="seconds")
     if empreinte:
@@ -257,7 +279,8 @@ def generer_pdf(dossier: Path, titre: str, sous_titre: str, societe: str = "") -
             c.showPage()
             y = entete_page()
         c.setFont("Helvetica-Bold", 10)
-        c.drawString(marge, 58 * mm, "Signature du client — « bon pour accord »")
+        mention = "« bon pour accord »" if data.get("accord") else "signature recueillie"
+        c.drawString(marge, 58 * mm, f"Signature du client — {mention}")
         c.setFont("Helvetica", 9)
         qui = data.get("signataire") or ""
         fonction = data.get("fonction") or ""
