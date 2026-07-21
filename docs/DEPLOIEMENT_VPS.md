@@ -95,8 +95,9 @@ Sur `https://app.gb-location.fr`, se connecter en admin, puis **Administration**
 
 1. **Comptes** : créer les comptes chauffeurs (rôle « chauffeur » — ils ne voient que leurs constats).
 2. **Accès à distance** : renseigner `https://app.gb-location.fr` → le **QR code** apparaît.
-   Chaque chauffeur le scanne, se connecte, puis « **Ajouter à l'écran d'accueil** » : l'app
-   s'installe sur son téléphone (icône GB, plein écran).
+   Pour les chauffeurs, remettez-leur la fiche simple **`INSTALLER_SUR_TELEPHONE.md`**
+   (3 étapes, iPhone / Android) : ils scannent le QR, se connectent, « Ajouter à l'écran
+   d'accueil », et l'app s'installe (icône GB, plein écran).
 3. **E-mail** : renseigner le SMTP de la société (demander au prestataire messagerie) et faire
    « Envoyer un test ». C'est ce qui permet d'envoyer la **copie signée au client depuis le chantier**.
 
