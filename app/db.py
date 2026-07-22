@@ -94,9 +94,17 @@ _pret = False
 @contextmanager
 def _conn():
     DB_PATH.parent.mkdir(parents=True, exist_ok=True)
-    cx = sqlite3.connect(DB_PATH)
+    # Délai d'attente si la base est momentanément verrouillée par un autre poste (accès
+    # partagé) : évite les erreurs « database is locked » sporadiques.
+    cx = sqlite3.connect(DB_PATH, timeout=15)
     cx.row_factory = sqlite3.Row
-    cx.execute("PRAGMA journal_mode=WAL")
+    # WAL exige une mémoire partagée que les partages réseau (SMB) ne fournissent PAS : sur le
+    # serveur partagé on utilise le journal classique (DELETE), fiable en multi-poste ; en local
+    # (dev) on garde WAL, plus rapide.
+    from app.config import DONNEES_RESEAU
+
+    cx.execute("PRAGMA journal_mode=DELETE" if DONNEES_RESEAU else "PRAGMA journal_mode=WAL")
+    cx.execute("PRAGMA busy_timeout=15000")
     cx.execute("PRAGMA foreign_keys=ON")
     try:
         yield cx

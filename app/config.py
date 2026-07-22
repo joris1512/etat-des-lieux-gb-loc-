@@ -10,21 +10,48 @@ from pathlib import Path
 from pydantic import Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
-VERSION = "2.5.0"
+VERSION = "2.5.1"
 
 # Racine du projet = dossier parent de `app/`.
 # En mode « figé » (.exe PyInstaller --onedir), la racine est le dossier de l'exécutable
 # (les données templates/ config/ … y sont livrées à côté, et restent modifiables).
+def _est_reseau(chemin: Path) -> bool:
+    """True si `chemin` est sur un partage réseau (UNC ou lecteur mappé distant, ex. P:)."""
+    try:
+        texte = str(chemin)
+        if texte.startswith("\\\\"):  # chemin UNC \\serveur\partage
+            return True
+        lecteur = os.path.splitdrive(texte)[0]
+        if lecteur and os.name == "nt":
+            import ctypes
+
+            return ctypes.windll.kernel32.GetDriveTypeW(lecteur + "\\") == 4  # DRIVE_REMOTE
+    except Exception:  # noqa: BLE001 — en cas de doute, on suppose « local »
+        pass
+    return False
+
+
+# Emplacement de l'ancienne installation (données dans %LOCALAPPDATA%) — sert à la MIGRATION
+# automatique vers le dossier partagé sur le serveur (voir main.migrer_donnees_programme).
+ANCIEN_DONNEES_DIR: Path | None = None
+
 if getattr(sys, "frozen", False):
     # PyInstaller --onedir : les données livrées (--add-data) sont dans le dossier `_internal`
     # exposé via sys._MEIPASS ; ce dossier est réel et modifiable (règles, modèles, runtime).
     RACINE = Path(getattr(sys, "_MEIPASS", Path(sys.executable).resolve().parent))
-    # ⚠️ LES DONNÉES (base clients, documents, clé API) vivent HORS du dossier programme :
-    # une réinstallation / mise à jour ne peut ainsi JAMAIS les toucher.
-    DONNEES_DIR = Path(os.environ.get("LOCALAPPDATA") or str(RACINE)) / "GB Etats des lieux - donnees"
+    # LES DONNÉES (base clients, documents) vivent HORS du dossier programme, dans un dossier
+    # PARTAGÉ posé À CÔTÉ du programme (sur le serveur) : tous les postes qui lancent le même
+    # exécutable partagent ainsi la MÊME base (comptes, clients, historique). Le chemin est
+    # relatif à l'exécutable → il suit le programme quel que soit le lecteur réseau mappé.
+    _defaut = Path(sys.executable).resolve().parent.parent / "GB Etats des lieux - donnees"
+    DONNEES_DIR = Path(os.environ.get("GB_DONNEES_DIR") or _defaut)
+    ANCIEN_DONNEES_DIR = Path(os.environ.get("LOCALAPPDATA") or str(RACINE)) / "GB Etats des lieux - donnees"
 else:
     RACINE = Path(__file__).resolve().parents[1]
     DONNEES_DIR = RACINE
+
+# La base est-elle sur un partage réseau ? (→ mode journal SQLite compatible SMB dans db.py)
+DONNEES_RESEAU = _est_reseau(DONNEES_DIR)
 
 TEMPLATES_DIR = RACINE / "templates"
 CONFIG_CELLULES = RACINE / "config" / "cellules.yaml"

@@ -70,11 +70,43 @@ def migrer_donnees_programme(racine=None, donnees=None, runtime=None) -> None:
         logger.info("Clé API migrée vers le dossier protégé : %s", donnees)
 
 
+def migrer_depuis_ancien_dossier(ancien=None, runtime=None) -> None:
+    """Migre les données de l'ANCIEN emplacement local (%LOCALAPPDATA%) vers le dossier
+    PARTAGÉ du serveur, au premier lancement de la version « données partagées ».
+
+    Ne s'exécute que si le dossier partagé n'a pas ENCORE de base : les données du poste qui
+    ouvre l'application en premier (celui qui a l'historique) amorcent la base commune."""
+    from app.config import ANCIEN_DONNEES_DIR
+
+    ancien = ancien if ancien is not None else ANCIEN_DONNEES_DIR
+    runtime = runtime or RUNTIME_DIR
+    if not ancien or ancien == DONNEES_DIR:
+        return
+    ancien_runtime = ancien / "runtime"
+    # Migration UNIQUEMENT si le partagé est vierge (pas de base) et que l'ancien en a une.
+    if (ancien_runtime / "gb.db").is_file() and not (runtime / "gb.db").exists():
+        runtime.mkdir(parents=True, exist_ok=True)
+        for item in ancien_runtime.iterdir():
+            cible = runtime / item.name
+            if item.is_dir():
+                if not cible.exists():
+                    shutil.copytree(item, cible)
+            else:
+                shutil.copy2(item, cible)
+        logger.info("Données reprises depuis l'ancien poste vers le dossier partagé : %s", runtime)
+    # La clé API éventuellement posée à l'ancien emplacement suit aussi.
+    ancien_env = ancien / ".env"
+    if ancien_env.is_file() and not (DONNEES_DIR / ".env").exists():
+        DONNEES_DIR.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(ancien_env, DONNEES_DIR / ".env")
+
+
 @asynccontextmanager
 async def _lifespan(_app: FastAPI):
     # Migration éventuelle d'une ancienne installation, puis base + purge + sauvegarde du jour.
     try:
         migrer_donnees_programme()
+        migrer_depuis_ancien_dossier()
     except Exception as exc:  # noqa: BLE001 — une migration impossible ne doit pas bloquer l'app
         logger.warning("Migration des données impossible : %s", exc)
     db.init_db()
