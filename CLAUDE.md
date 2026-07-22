@@ -132,6 +132,11 @@ Routes clés : `/` (UI), `/analyser`, `/generer`, `/generer-revise`, `/telecharg
   **forcent `sys.stdout`/`stderr` en UTF-8** (bloc `reconfigure` en tête de `seed_demo.py`, `diagnostic.py`,
   `make_placeholder_templates.py`, `hash_password.py`). Garder ce garde si on ajoute un script. Côté app,
   toutes les lectures fichier utilisent `encoding="utf-8"` explicite (ne pas l'oublier).
-- **Déployer sur un disque LOCAL** (ex. `C:\GB\…`), **pas un partage réseau** : SQLite en mode WAL et la
-  tâche planifiée exécutée en compte **SYSTEM** ne sont pas fiables sur un partage SMB (le poste de dev
-  tourne sur `\\srv\…` via `P:`, ce qui fonctionne en mono-utilisateur mais reste déconseillé en prod).
+- **v2.5.1 — DONNÉES PARTAGÉES SUR LE SERVEUR (choix produit assumé, ne pas régresser).** Les données
+  (`DONNEES_DIR`) vivent dans un dossier **partagé à côté du programme** (`P:\Joris\GB Etats des lieux -
+  donnees`, sibling de APPLICATION FINALE) pour que **tous les postes partagent la même base**. Comme
+  SQLite en **WAL** n'est pas fiable sur SMB, `config.DONNEES_RESEAU` bascule automatiquement db.py en
+  `journal_mode=DELETE` + `busy_timeout` sur un chemin réseau. Réserve : robuste pour une petite équipe,
+  pas pour des écritures rigoureusement simultanées → la version « béton » multi-utilisateur reste le
+  **VPS web** (`docs/DEPLOIEMENT_VPS.md`). Migration auto de l'ancien `%LOCALAPPDATA%` au 1er lancement
+  (ouvrir d'abord l'appli sur le poste qui détient déjà les données).
