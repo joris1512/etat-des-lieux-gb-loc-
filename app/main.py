@@ -168,12 +168,31 @@ def _reponse_generation(rapport, job_dir: Path) -> dict:
     }
 
 
+async def _lire_borne(fichier: UploadFile, max_octets: int = MAX_BODY) -> bytes:
+    """Lit un upload en BORNANT la taille au fil de l'eau.
+
+    Indispensable : le middleware de taille ne voit que Content-Length ; une requête
+    « Transfer-Encoding: chunked » le contourne. Ici on coupe dès le dépassement (413),
+    avant de tout matérialiser en mémoire / sur disque (anti déni de service)."""
+    morceaux: list[bytes] = []
+    total = 0
+    while True:
+        bloc = await fichier.read(256 * 1024)
+        if not bloc:
+            break
+        total += len(bloc)
+        if total > max_octets:
+            raise HTTPException(status_code=413, detail="Fichier trop volumineux.")
+        morceaux.append(bloc)
+    return b"".join(morceaux)
+
+
 async def _lire_pdf(fichier: UploadFile | None) -> bytes:
     if fichier is None:
         raise HTTPException(status_code=400, detail="Aucun fichier PDF fourni.")
     if not (fichier.filename or "").lower().endswith(".pdf"):
         raise HTTPException(status_code=400, detail="Le fichier doit être un PDF.")
-    data = await fichier.read()
+    data = await _lire_borne(fichier)
     if not data:
         raise HTTPException(status_code=400, detail="Le PDF est vide.")
     return data
@@ -352,8 +371,8 @@ async def parametres_ecrire(request: Request, corps: dict) -> dict:
 @app.post("/parametres/logo")
 async def parametres_logo(request: Request, fichier: UploadFile = File(...)) -> dict:
     exiger_admin(request)
-    contenu = await fichier.read()
-    if not contenu or len(contenu) > 2 * 1024 * 1024:
+    contenu = await _lire_borne(fichier, 2 * 1024 * 1024)
+    if not contenu:
         raise HTTPException(status_code=400, detail="Image requise (2 Mo max).")
     # Signatures de fichier : PNG ou JPEG uniquement (pas de SVG ni de HTML déguisé).
     est_png = contenu.startswith(b"\x89PNG\r\n\x1a\n")
@@ -492,7 +511,7 @@ async def importer_csv_endpoint(fichier: UploadFile = File(...)) -> dict:
     """Importe une base clients depuis un CSV (export CRM / tableur)."""
     if not (fichier.filename or "").lower().endswith(".csv"):
         raise HTTPException(status_code=400, detail="Le fichier doit être un .csv.")
-    contenu = await fichier.read()
+    contenu = await _lire_borne(fichier)
     if not contenu:
         raise HTTPException(status_code=400, detail="Le fichier est vide.")
     try:
@@ -550,6 +569,7 @@ def interlocuteur_supprimer_endpoint(client_id: int, nom: str) -> dict:
 @app.delete("/clients/{client_id}")
 def client_supprimer_endpoint(client_id: int, request: Request) -> dict:
     """Efface un client et toutes ses données (RGPD — droit à l'effacement), fichiers compris."""
+    exiger_admin(request)  # effacement irréversible : réservé aux administrateurs
     jobs = db.supprimer_client(client_id)
     if jobs is None:
         raise HTTPException(status_code=404, detail="Client introuvable.")
@@ -599,6 +619,7 @@ def correspondances_lister() -> dict:
 @app.post("/correspondances")
 async def correspondances_enregistrer(regle: dict, request: Request) -> dict:
     """Ajoute une règle ou remplace celle du même mot déclencheur."""
+    exiger_admin(request)  # règles de reconnaissance : configuration réservée aux administrateurs
     pattern = (regle.get("pattern") or "").strip()
     modele = (regle.get("modele") or "").strip()
     if not pattern or not modele:
@@ -616,18 +637,20 @@ async def correspondances_enregistrer(regle: dict, request: Request) -> dict:
 @app.delete("/correspondances")
 def correspondances_supprimer(pattern: str, request: Request) -> dict:
     """Supprime la règle du mot déclencheur donné."""
+    exiger_admin(request)
     supprimer_regle(pattern)
     logger.info("AUDIT règle supprimée : %s par %s", pattern, utilisateur_courant(request))
     return {"regles": lister_regles(), "modeles": modeles_presents()}
 
 
 @app.post("/modeles")
-async def modeles_televerser(fichiers: list[UploadFile] = File(...)) -> dict:
+async def modeles_televerser(request: Request, fichiers: list[UploadFile] = File(...)) -> dict:
     """Téléverse un ou plusieurs modèles .xlsx (remplace s'il existe déjà)."""
+    exiger_admin(request)  # la bibliothèque de modèles est une configuration : admin only
     resultats = []
     for f in fichiers:
         try:
-            contenu = await f.read()
+            contenu = await _lire_borne(f)
             nom = enregistrer_modele(f.filename or "", contenu)
             resultats.append({"nom": nom, "ok": True})
         except Exception as exc:  # noqa: BLE001
@@ -638,6 +661,7 @@ async def modeles_televerser(fichiers: list[UploadFile] = File(...)) -> dict:
 @app.delete("/modeles/{nom}")
 def modeles_supprimer(nom: str, request: Request) -> dict:
     """Supprime un modèle de la bibliothèque."""
+    exiger_admin(request)  # les modèles sont le cœur de la génération : suppression admin only
     try:
         supprimer_modele(nom)
     except Exception as exc:  # noqa: BLE001
@@ -841,8 +865,8 @@ async def constat_enregistrer(job_id: str, nom: str, corps: dict) -> dict:
 @app.post("/terrain/{job_id}/{nom}/photo")
 async def constat_photo(job_id: str, nom: str, fichier: UploadFile = File(...)) -> dict:
     document, dossier = _contexte_constat(job_id, nom)
-    contenu = await fichier.read()
-    if not contenu or len(contenu) > 8 * 1024 * 1024:
+    contenu = await _lire_borne(fichier, 8 * 1024 * 1024)
+    if not contenu:
         raise HTTPException(status_code=400, detail="Photo requise (8 Mo max).")
     try:
         terrain.ajouter_photo(dossier, contenu)

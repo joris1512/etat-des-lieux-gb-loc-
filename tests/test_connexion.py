@@ -224,3 +224,44 @@ def test_adresse_publique_enregistree_et_dans_le_qr():
     assert infos["adresse_publique"] == "https://app.gb-location.fr"
     qr = tc.get("/mobile-qr", auth=auth)
     assert qr.status_code == 200 and "svg" in qr.headers["content-type"]
+
+
+# ------------------------------------------- autorisation des routes destructives
+
+def test_utilisateur_non_admin_ne_detruit_rien():
+    db.creer_utilisateur("admin", "Admin", hacher("motdepasse8"), "admin")
+    db.creer_utilisateur("secretaire", "Secrétaire", hacher("motdepasse8"), "utilisateur")
+    tc = TestClient(app)
+    u = ("secretaire", "motdepasse8")
+    # Routes destructives / configuration : interdites à un compte « utilisateur ».
+    assert tc.delete("/clients/1", auth=u).status_code == 403          # effacement RGPD
+    assert tc.delete("/modeles/bungalow_vide.xlsx", auth=u).status_code == 403
+    assert tc.post("/correspondances", json={"pattern": "x", "modele": "y"}, auth=u).status_code == 403
+    assert tc.delete("/correspondances?pattern=x", auth=u).status_code == 403
+    # L'admin, lui, passe la garde d'autorisation (404 = au-delà, pas 403).
+    assert tc.delete("/clients/999999", auth=("admin", "motdepasse8")).status_code == 404
+
+
+def test_lecture_bornee_coupe_les_uploads_trop_gros():
+    import asyncio
+
+    import pytest
+
+    from fastapi import HTTPException
+
+    from app.main import _lire_borne
+
+    class FauxUpload:
+        def __init__(self, data):
+            self._buf, self._pos = data, 0
+
+        async def read(self, n=-1):
+            taille = n if (n and n > 0) else len(self._buf)
+            bloc = self._buf[self._pos: self._pos + taille]
+            self._pos += len(bloc)
+            return bloc
+
+    assert len(asyncio.run(_lire_borne(FauxUpload(b"x" * 1000), 5000))) == 1000
+    with pytest.raises(HTTPException) as exc:
+        asyncio.run(_lire_borne(FauxUpload(b"x" * 20000), 5000))
+    assert exc.value.status_code == 413

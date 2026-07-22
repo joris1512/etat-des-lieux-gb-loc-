@@ -251,10 +251,13 @@ def supprimer_client(client_id: int) -> list[str] | None:
         cx.execute("DELETE FROM devis WHERE client_id=?", (client_id,))
         cx.execute("DELETE FROM clients WHERE id=?", (client_id,))
         # Journal : purge ciblée par client_id ; le LIKE sur la raison sociale ne sert que pour
-        # les anciennes entrées créées avant la colonne client_id (nom d'entreprise = long,
-        # collision improbable ; surtout pas de LIKE sur le n° client, trop court).
+        # les anciennes entrées créées avant la colonne client_id.
         cx.execute("DELETE FROM journal WHERE client_id=?", (client_id,))
-        cx.execute("DELETE FROM journal WHERE libelle LIKE ?", (f"%{client['raison_sociale']}%",))
+        raison = (client["raison_sociale"] or "").strip()
+        if len(raison) >= 4:  # garde : un nom trop court sur-supprimerait des entrées d'autres clients
+            # Échappe les métacaractères LIKE (%, _, \) pour ne matcher QUE le nom littéral.
+            motif = raison.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+            cx.execute("DELETE FROM journal WHERE libelle LIKE ? ESCAPE '\\'", (f"%{motif}%",))
         cx.execute(
             "INSERT INTO journal (horodatage, horodatage_aff, type, libelle) VALUES (?,?,?,?)",
             (iso, aff, "client_supprime", f"Client supprimé sur demande (RGPD) — fiche n° {client_id}"),

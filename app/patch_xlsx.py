@@ -246,10 +246,11 @@ def _style_wrap(styles_xml: str, base_index: int, cache: dict[int, int]) -> tupl
             neuf = re.sub(r'<alignment\b', '<alignment wrapText="1" vertical="top" ', base, count=1)
     elif base.endswith("/>"):
         neuf = base[:-2] + ' applyAlignment="1"><alignment wrapText="1" vertical="top"/></xf>'
-    else:  # <xf ...>...</xf> sans alignment
-        neuf = base.replace("<xf", '<xf applyAlignment="1"', 1).replace(
-            "</xf>", '<alignment wrapText="1" vertical="top"/></xf>', 1
-        )
+    else:  # <xf ...>...</xf> sans alignment : l'alignment doit être le 1er enfant (ordre CT_Xf)
+        ouvrante = re.match(r"<xf\b[^>]*>", base).group(0)
+        if "applyAlignment" not in ouvrante:
+            ouvrante = ouvrante[:-1] + ' applyAlignment="1">'
+        neuf = ouvrante + '<alignment wrapText="1" vertical="top"/>' + base[re.match(r"<xf\b[^>]*>", base).end():]
 
     nouvel_index = len(entrees)
     bloc = m.group(1) + str(nouvel_index + 1) + m.group(3) + m.group(4) + neuf + m.group(5)
