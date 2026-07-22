@@ -78,17 +78,30 @@ def _cellule_xml(ref: str, valeur: object, style: str) -> str:
     return f'<c r="{ref}"{style} t="inlineStr"><is><t xml:space="preserve">{txt}</t></is></c>'
 
 
-def _ecrire_une(xml: str, ref: str, valeur: object) -> str:
-    """Remplace la cellule `ref` (en gardant son style) ou l'insère dans sa ligne."""
+def _style_index_actuel(xml: str, ref: str) -> int:
+    """Index de style (`s="N"`) de la cellule `ref` dans le modèle (0 si absent)."""
+    m = re.search(rf'<c r="{ref}"([^>]*?)(/>|>.*?</c>)', xml, re.DOTALL)
+    if m:
+        s = re.search(r'\ss="(\d+)"', m.group(1))
+        if s:
+            return int(s.group(1))
+    return 0
+
+
+def _ecrire_une(xml: str, ref: str, valeur: object, style_force: str | None = None) -> str:
+    """Remplace la cellule `ref` (en gardant son style, ou `style_force`) ou l'insère dans sa ligne."""
     pat = re.compile(rf'<c r="{ref}"([^>]*?)(/>|>.*?</c>)', re.DOTALL)
     m = pat.search(xml)
     if m:
-        s = re.search(r'\ss="\d+"', m.group(1))
-        style = s.group(0) if s else ""
+        if style_force is not None:
+            style = style_force
+        else:
+            s = re.search(r'\ss="\d+"', m.group(1))
+            style = s.group(0) if s else ""
         return xml[: m.start()] + _cellule_xml(ref, valeur, style) + xml[m.end() :]
 
     # Cellule absente : on l'insère dans sa ligne (créée au besoin), en ordre de colonne.
-    neuf = _cellule_xml(ref, valeur, "")
+    neuf = _cellule_xml(ref, valeur, style_force or "")
     row = _row_num(ref)
     col = _col_index(ref)
     rowpat = re.compile(rf'(<row r="{row}"[^>]*>)(.*?)(</row>)', re.DOTALL)
@@ -211,19 +224,83 @@ def inserer_image(
     return True
 
 
+def _style_wrap(styles_xml: str, base_index: int, cache: dict[int, int]) -> tuple[str, int]:
+    """Crée (ou réutilise) une variante du style `base_index` avec « renvoi à la ligne » activé.
+
+    Sans wrapText, les `\\n` d'une cellule s'affichent à la suite au lieu d'aller à la ligne :
+    on dérive un style identique + `<alignment wrapText="1" vertical="top"/>`. Renvoie le XML des
+    styles (éventuellement enrichi) et l'index du style à utiliser."""
+    if base_index in cache:
+        return styles_xml, cache[base_index]
+
+    m = re.search(r'(<cellXfs count=")(\d+)("[^>]*>)(.*?)(</cellXfs>)', styles_xml, re.DOTALL)
+    if not m:
+        return styles_xml, base_index  # classeur sans cellXfs (rare) : on ne casse rien
+    entrees = re.findall(r'<xf\b[^>]*?(?:/>|>.*?</xf>)', m.group(4), re.DOTALL)
+    base = entrees[base_index] if 0 <= base_index < len(entrees) else (entrees[0] if entrees else "<xf/>")
+
+    if "<alignment" in base:
+        if "wrapText" in base:
+            neuf = base  # déjà en renvoi à la ligne : rien à faire, mais on isole un index dédié
+        else:
+            neuf = re.sub(r'<alignment\b', '<alignment wrapText="1" vertical="top" ', base, count=1)
+    elif base.endswith("/>"):
+        neuf = base[:-2] + ' applyAlignment="1"><alignment wrapText="1" vertical="top"/></xf>'
+    else:  # <xf ...>...</xf> sans alignment
+        neuf = base.replace("<xf", '<xf applyAlignment="1"', 1).replace(
+            "</xf>", '<alignment wrapText="1" vertical="top"/></xf>', 1
+        )
+
+    nouvel_index = len(entrees)
+    bloc = m.group(1) + str(nouvel_index + 1) + m.group(3) + m.group(4) + neuf + m.group(5)
+    styles_xml = styles_xml[: m.start()] + bloc + styles_xml[m.end() :]
+    cache[base_index] = nouvel_index
+    return styles_xml, nouvel_index
+
+
+def _hauteur_ligne(xml: str, row: int, nb_lignes: int) -> str:
+    """Fixe une hauteur de ligne suffisante pour afficher `nb_lignes` (cases fusionnées incluses)."""
+    hauteur = round(nb_lignes * 15.0, 1)
+    m = re.search(rf'<row r="{row}"([^>]*?)>', xml)
+    if not m:
+        return xml
+    attrs = re.sub(r'\s(ht|customHeight)="[^"]*"', "", m.group(1))
+    return f'{xml[: m.start()]}<row r="{row}"{attrs} ht="{hauteur}" customHeight="1">{xml[m.end():]}'
+
+
 def ecrire_cellules(
     modele: Path, sortie: Path, feuille: str | None, valeurs: dict[str, object]
 ) -> None:
-    """Écrit `valeurs` (réf -> valeur) sur `feuille` de `modele`, vers `sortie`, tout préservé."""
+    """Écrit `valeurs` (réf -> valeur) sur `feuille` de `modele`, vers `sortie`, tout préservé.
+
+    Les valeurs multi-lignes (mobilier abondant) reçoivent le « renvoi à la ligne » et une hauteur
+    de ligne adaptée pour être lisibles, au lieu de s'étaler à la suite."""
     with zipfile.ZipFile(modele) as zin:
         items = {n: zin.read(n) for n in zin.namelist()}
     cible = _chemin_feuille(items, feuille)
     xml = items[cible].decode("utf-8")
+    styles_xml = items.get("xl/styles.xml", b"").decode("utf-8")
+    cache_wrap: dict[int, int] = {}
+    hauteurs: dict[int, int] = {}
+
     for ref, valeur in valeurs.items():
         if valeur is None or valeur == "":
             continue
-        xml = _ecrire_une(xml, ref, valeur)
+        if isinstance(valeur, str) and "\n" in valeur and styles_xml:
+            base = _style_index_actuel(xml, ref)
+            styles_xml, idx = _style_wrap(styles_xml, base, cache_wrap)
+            xml = _ecrire_une(xml, ref, valeur, style_force=f' s="{idx}"')
+            r = _row_num(ref)
+            hauteurs[r] = max(hauteurs.get(r, 0), valeur.count("\n") + 1)
+        else:
+            xml = _ecrire_une(xml, ref, valeur)
+
+    for row, nb in hauteurs.items():
+        xml = _hauteur_ligne(xml, row, nb)
+
     items[cible] = xml.encode("utf-8")
+    if styles_xml:
+        items["xl/styles.xml"] = styles_xml.encode("utf-8")
     sortie.parent.mkdir(parents=True, exist_ok=True)
     with zipfile.ZipFile(sortie, "w", zipfile.ZIP_DEFLATED) as zout:
         for nom, data in items.items():

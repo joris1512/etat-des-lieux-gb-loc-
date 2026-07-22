@@ -1,5 +1,7 @@
 """Mobilier sur les états : libellés courts « norme GB », quantités regroupées, rien de perdu."""
 
+from pathlib import Path
+
 from openpyxl import load_workbook
 
 from app.assemblage import construire_plan
@@ -88,6 +90,33 @@ def test_refectoire_mobilier_sur_individuel_norme_gb():
 def test_aucun_avertissement_mobilier_sur_eiffage():
     rapport, _job_dir, _ = _plan_et_fichiers()
     assert not any("rattach" in a.lower() for a in rapport.avertissements)
+
+
+def test_mobilier_abondant_renvoie_a_la_ligne(tmp_path):
+    """Beaucoup de mobilier dans une cellule = renvoi à la ligne + case agrandie (pas « à la suite »).
+
+    Sans wrapText, Excel affiche les lignes en continu : on vérifie que le style porte bien le
+    renvoi à la ligne et que la hauteur de ligne est augmentée, sans casser le classeur."""
+    import re
+    import zipfile
+
+    from app import patch_xlsx
+
+    src = Path(__file__).parent.parent / "templates" / "bungalow_mobilier.xlsx"
+    out = tmp_path / "mobilier.xlsx"
+    lignes = [f"Article {i} : {i}" for i in range(1, 13)]  # 12 lignes
+    patch_xlsx.ecrire_cellules(src, out, "Bungalow avec mobiliers", {"A46": "\n".join(lignes)})
+
+    wb = load_workbook(out)
+    ws = wb["Bungalow avec mobiliers"]
+    assert ws["A46"].alignment.wrap_text is True          # renvoi à la ligne activé
+    assert str(ws["A46"].value).count("\n") == 11          # 12 lignes conservées
+    assert ws.row_dimensions[46].height and ws.row_dimensions[46].height >= 12 * 15  # case agrandie
+
+    # Intégrité : le logo / les dessins du modèle restent présents.
+    with zipfile.ZipFile(out) as z:
+        assert any(re.search(r"drawing\d*\.xml$", n) for n in z.namelist())
+        assert any(n.startswith("xl/media/") for n in z.namelist())
 
 
 def test_kit_reste_choisi_quand_kitchenette_seule():
