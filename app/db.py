@@ -66,6 +66,15 @@ CREATE TABLE IF NOT EXISTS fichiers (
   generation_id INTEGER NOT NULL REFERENCES generations(id) ON DELETE CASCADE,
   nom TEXT NOT NULL, type_etat TEXT, bloc TEXT
 );
+CREATE TABLE IF NOT EXISTS documents_chantier (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  chantier_id INTEGER NOT NULL REFERENCES chantiers(id) ON DELETE CASCADE,
+  nom_affiche TEXT NOT NULL,
+  nom_stocke TEXT NOT NULL,
+  taille INTEGER,
+  horodatage TEXT NOT NULL, horodatage_aff TEXT NOT NULL,
+  ajoute_par TEXT
+);
 CREATE TABLE IF NOT EXISTS parametres (
   cle TEXT PRIMARY KEY,
   valeur TEXT
@@ -721,11 +730,68 @@ def lire_chantier(chantier_id: int) -> dict | None:
             gg = dict(g)
             gg["fichiers"] = [dict(f) for f in fics]
             generations.append(gg)
+        docs = cx.execute(
+            """SELECT id, nom_affiche, taille, horodatage_aff, ajoute_par
+               FROM documents_chantier WHERE chantier_id=? ORDER BY id DESC""",
+            (chantier_id,),
+        ).fetchall()
     d = dict(ch)
     d["client"] = dict(client) if client else None
     d["devis"] = [dict(x) for x in devis]
     d["generations"] = generations
+    d["documents"] = [dict(x) for x in docs]
     return d
+
+
+# --------------------------------------------------------------------------- #
+# Documents attachés à un chantier (scans, PDF, photos) — ajoutés au bureau ou terrain
+# --------------------------------------------------------------------------- #
+def ajouter_document_chantier(
+    chantier_id: int, nom_affiche: str, ext: str, taille: int, ajoute_par: str
+) -> dict | None:
+    """Enregistre un document rattaché à un chantier. Le nom stocké est `{id}{ext}` (numérique,
+    donc insensible au path-traversal). Renvoie {id, nom_stocke, nom_affiche} ou None si le
+    chantier n'existe pas."""
+    _ensure()
+    now = datetime.now()
+    with _conn() as cx:
+        if cx.execute("SELECT 1 FROM chantiers WHERE id=?", (chantier_id,)).fetchone() is None:
+            return None
+        cur = cx.execute(
+            """INSERT INTO documents_chantier
+                 (chantier_id, nom_affiche, nom_stocke, taille, horodatage, horodatage_aff, ajoute_par)
+               VALUES (?,?,?,?,?,?,?)""",
+            (chantier_id, nom_affiche, "", taille,
+             now.isoformat(timespec="seconds"), now.strftime("%d/%m/%Y · %H:%M"), ajoute_par),
+        )
+        doc_id = cur.lastrowid
+        nom_stocke = f"{doc_id}{ext}"
+        cx.execute("UPDATE documents_chantier SET nom_stocke=? WHERE id=?", (nom_stocke, doc_id))
+    return {"id": doc_id, "nom_stocke": nom_stocke, "nom_affiche": nom_affiche}
+
+
+def lire_document_chantier(doc_id: int) -> dict | None:
+    """Renvoie un document (avec son chantier_id et son nom stocké) pour le servir/supprimer."""
+    _ensure()
+    with _conn() as cx:
+        r = cx.execute(
+            "SELECT id, chantier_id, nom_affiche, nom_stocke FROM documents_chantier WHERE id=?",
+            (doc_id,),
+        ).fetchone()
+    return dict(r) if r else None
+
+
+def supprimer_document_chantier(doc_id: int) -> dict | None:
+    """Supprime la ligne d'un document et renvoie ses infos (pour effacer le fichier)."""
+    _ensure()
+    with _conn() as cx:
+        r = cx.execute(
+            "SELECT id, chantier_id, nom_stocke FROM documents_chantier WHERE id=?", (doc_id,)
+        ).fetchone()
+        if r is None:
+            return None
+        cx.execute("DELETE FROM documents_chantier WHERE id=?", (doc_id,))
+    return dict(r)
 
 
 def stats_avancees() -> dict:

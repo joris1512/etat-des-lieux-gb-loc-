@@ -480,8 +480,10 @@
 
       <!-- ESPACE CHAUFFEUR -->
       <section class="view" id="view-chauffeur">
-        <div class="page-head" style="margin-bottom:22px"><div class="eyebrow">// TERRAIN</div><h1 class="title">Mes constats</h1><p class="subtitle">Choisissez le document, remplissez le constat, faites signer, envoyez.</p></div>
-        <div id="chauffeur-liste"><div class="card"><div class="empty"><p>Chargement…</p></div></div></div>
+        <div class="page-head" style="margin-bottom:18px"><div class="eyebrow">// TERRAIN</div><h1 class="title">Mes chantiers</h1><p class="subtitle">Cherchez un client, ouvrez son chantier : devis, états des lieux, documents. Remplissez, faites signer, scannez.</p></div>
+        <div class="searchbar" style="margin-bottom:16px"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><path d="M21 21l-4.3-4.3"/></svg><input id="ch-q" placeholder="Rechercher un client (nom ou n°)…" /></div>
+        <div id="ch-nav"></div>
+        <div id="ch-recents"><div class="card"><div class="empty"><p>Chargement…</p></div></div></div>
       </section>
 
       <!-- UTILISATEURS -->
@@ -755,9 +757,11 @@
         <div class="card"><div class="eyebrow" style="margin-bottom:6px">// CHANTIER</div><h1 class="title" style="font-size:26px">${esc(ch.titre||'—')}</h1>
           <div class="kv" style="margin-top:18px"><div class="k">Adresse</div><div>${esc([ch.adresse,ch.code_postal,ch.ville].filter(Boolean).join(', '))||'—'}</div><div class="k">Client</div><div>${esc(ch.client?ch.client.raison_sociale:'—')}</div></div></div>
         <div class="card"><div class="card-h"><span class="ic">${I.doc}</span> Devis</div>${devisT}</div>
-        <div class="card"><div class="card-h"><span class="ic">${I.layers}</span> États des lieux &amp; documents · ${nbDocs}</div>${docs}</div>
+        <div class="card"><div class="card-h"><span class="ic">${I.layers}</span> États des lieux · ${nbDocs}</div>${docs}</div>
+        <div id="doc-zone">${htmlDocuments(ch)}</div>
         <div class="card"><div class="card-h"><span class="ic">${I.users}</span> Historique</div>${histo}</div>`;
       $('#ch-back').addEventListener('click',()=>{clientCourant?ouvrirClient(clientCourant.id):chargerClients();});
+      brancherDocuments();
       masquerClients();$('#chantier-detail').style.display='block';window.scrollTo({top:0,behavior:'smooth'});
     }
 
@@ -976,16 +980,82 @@
     });
 
     /* ESPACE CHAUFFEUR : liste des dossiers -> documents -> bouton Constat */
+    /* Bloc « Documents du chantier » — réutilisé côté bureau ET côté chauffeur. */
+    function htmlDocuments(ch){
+      const docs=ch.documents||[];
+      const liste=docs.length?docs.map(d=>`<div class="frow"><div class="fic individuel">${I.file}</div><div class="fname">${esc(d.nom_affiche)}</div><div class="meta"><span class="hint">${esc(d.horodatage_aff||'')}${d.ajoute_par?' · '+esc(d.ajoute_par):''}</span><a class="dl" href="/chantiers/${ch.id}/documents/${d.id}" target="_blank">${I.dl} Ouvrir</a></div></div>`).join('')
+        :'<div class="empty" style="padding:12px"><p>Aucun document. Scannez ou joignez un PDF, une photo, un Excel…</p></div>';
+      return `<div class="card"><div class="card-h"><span class="ic">${I.file}</span> Documents du chantier · ${docs.length}</div>
+        <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-bottom:12px">
+          <input type="file" id="doc-upload" data-chantier="${ch.id}" accept="image/*,application/pdf,.xlsx,.xls,.docx,.doc" capture="environment" multiple style="max-width:320px">
+          <span class="hint">Scannez ou joignez un document (PDF, photo, Excel, Word) — 20 Mo max.</span>
+        </div>
+        <div id="doc-liste">${liste}</div></div>`;
+    }
+    function brancherDocuments(){
+      const inp=$('#doc-upload');if(!inp)return;
+      inp.addEventListener('change',async()=>{
+        const cid=inp.dataset.chantier;let ok=0;
+        for(const f of inp.files){
+          let fichier=f;if((f.type||'').startsWith('image/'))fichier=await compresserPhoto(f);
+          const fd=new FormData();fd.append('fichier',fichier);
+          try{const r=await fetch('/chantiers/'+cid+'/documents',{method:'POST',body:fd});const d=await r.json();if(!r.ok)throw new Error(d.detail||'Erreur');const z=$('#doc-zone');if(z){z.innerHTML=htmlDocuments(d);brancherDocuments();}ok++;}
+          catch(e){toast(e.message,'bad');}
+        }
+        if(ok)toast(ok+' document(s) ajouté(s) au chantier.','ok');
+      });
+    }
+
+    /* ESPACE CHAUFFEUR : recherche client → chantiers → devis / états des lieux / documents */
+    let chClients=[];
     async function chargerChauffeur(){
-      const box=$('#chauffeur-liste');
-      let d;try{d=await(await fetch('/constats')).json();}catch(_){box.innerHTML='<div class="card"><div class="empty"><p>Chargement impossible.</p></div></div>';return;}
-      if(!d.dossiers.length){box.innerHTML='<div class="card"><div class="empty"><p>Aucun dossier pour le moment. Les documents générés au bureau apparaîtront ici.</p></div></div>';return;}
-      box.innerHTML=d.dossiers.map(g=>{
+      try{chClients=(await(await fetch('/clients')).json()).clients||[];}catch(_){chClients=[];}
+      const rec=$('#ch-recents');
+      let d;try{d=await(await fetch('/constats')).json();}catch(_){rec.innerHTML='';return;}
+      const cartes=d.dossiers.map(g=>{
         const docs=g.fichiers.map(f=>{const url=`/telecharger/${encodeURIComponent(g.job_id)}/${encodeURIComponent(f.nom)}`;
           return `<div class="frow"><div class="fic individuel">${I.doc}</div><div class="fname">${esc(f.nom)}</div><div class="meta"><a class="dl" href="#" data-constat="${url}">${I.user} Constat</a></div></div>`;}).join('');
         return `<div class="card"><div class="card-h">${esc(g.client||'—')} · ${esc(g.chantier||'')} <span style="margin-left:auto;font-weight:400;text-transform:none;letter-spacing:0">${esc(g.horodatage||'')}</span></div>${docs||'<div class="empty"><p>Aucun document.</p></div>'}</div>`;
       }).join('');
+      rec.innerHTML=(cartes?('<div class="card-h" style="margin:4px 2px 10px">Derniers constats</div>'+cartes):'<div class="card"><div class="empty"><p>Aucun constat récent. Cherchez un client ci-dessus pour ouvrir un chantier.</p></div></div>');
     }
+    function chercherChauffeur(){
+      const q=($('#ch-q').value||'').trim().toLowerCase();
+      const nav=$('#ch-nav'),rec=$('#ch-recents');
+      if(!q){nav.innerHTML='';rec.style.display='';return;}
+      rec.style.display='none';
+      const res=chClients.filter(c=>(c.raison_sociale||'').toLowerCase().includes(q)||(c.numero_client||'').toLowerCase().includes(q)).slice(0,50);
+      nav.innerHTML=res.length?('<div class="card"><div class="card-h">Clients · '+res.length+'</div>'+res.map(c=>`<div class="frow" data-chcli="${c.id}" style="cursor:pointer"><div class="fic individuel">${I.users}</div><div class="fname">${esc(c.raison_sociale)}${c.numero_client?' · '+esc(c.numero_client):''}</div><div class="meta"><span class="hint">${c.nb_chantiers||0} chantier(s)</span></div></div>`).join('')+'</div>')
+        :'<div class="card"><div class="empty"><p>Aucun client trouvé pour « '+esc(q)+' ».</p></div></div>';
+    }
+    async function chauffeurClient(id){
+      let c;try{c=await(await fetch('/clients/'+id)).json();}catch(_){toast('Client indisponible.','bad');return;}
+      const chs=c.chantiers.length?c.chantiers.map(ch=>`<div class="frow" data-chchantier="${ch.id}" style="cursor:pointer"><div class="fic individuel">${I.cube}</div><div class="fname">${esc(ch.titre||'—')}</div><div class="meta"><span class="hint">${ch.nb_devis||0} devis · ${ch.nb_etats||0} états</span></div></div>`).join('')
+        :'<div class="empty" style="padding:12px"><p>Aucun chantier pour ce client.</p></div>';
+      $('#ch-nav').innerHTML=`<button class="back" id="chn-back">${I.back} Retour à la recherche</button><div class="card"><div class="card-h">${esc(c.raison_sociale)}</div>${chs}</div>`;
+      $('#chn-back').addEventListener('click',chercherChauffeur);
+      window.scrollTo({top:0,behavior:'smooth'});
+    }
+    async function chauffeurChantier(id){
+      let ch;try{ch=await(await fetch('/chantiers/'+id)).json();}catch(_){toast('Chantier indisponible.','bad');return;}
+      const devis=ch.devis.length?('<table class="tbl"><thead><tr><th>N° Offre</th><th>Commercial</th><th>Date</th></tr></thead><tbody>'+ch.devis.map(d=>`<tr><td class="id">${esc(d.numero_offre||'—')}</td><td>${esc(d.commercial||'—')}</td><td class="n" style="color:var(--muted)">${esc(d.date_devis||'—')}</td></tr>`).join('')+'</tbody></table>'):'<div class="empty" style="padding:12px"><p>Aucun devis.</p></div>';
+      let etats='',n=0;
+      ch.generations.forEach(g=>{(g.fichiers||[]).filter(f=>f.nom.endsWith('.xlsx')).forEach(f=>{n++;const url=g.job_id?`/telecharger/${encodeURIComponent(g.job_id)}/${encodeURIComponent(f.nom)}`:null;etats+=`<div class="frow"><div class="fic individuel">${I.doc}</div><div class="fname">${esc(f.nom)}</div><div class="meta">${url?`<a class="dl" href="#" data-constat="${url}">${I.user} Constat</a><a class="dl" href="${url}">${I.dl} Télécharger</a>`:'<span class="hint">expiré</span>'}</div></div>`;});});
+      if(!n)etats='<div class="empty" style="padding:12px"><p>Aucun état des lieux produit pour ce chantier.</p></div>';
+      $('#ch-nav').innerHTML=`<button class="back" id="chn-back2">${I.back} Retour</button>
+        <div class="card"><div class="eyebrow" style="margin-bottom:6px">// CHANTIER</div><h2 style="margin:0;font-size:22px">${esc(ch.titre||'—')}</h2><div class="hint" style="margin-top:6px">${esc(ch.client?ch.client.raison_sociale:'')}${ch.ville?' · '+esc(ch.ville):''}</div></div>
+        <div class="card"><div class="card-h"><span class="ic">${I.doc}</span> Devis</div>${devis}</div>
+        <div class="card"><div class="card-h"><span class="ic">${I.layers}</span> États des lieux · ${n}</div>${etats}</div>
+        <div id="doc-zone">${htmlDocuments(ch)}</div>`;
+      $('#chn-back2').addEventListener('click',()=>{ch.client?chauffeurClient(ch.client.id):chercherChauffeur();});
+      brancherDocuments();
+      window.scrollTo({top:0,behavior:'smooth'});
+    }
+    document.addEventListener('input',e=>{if(e.target&&e.target.id==='ch-q')chercherChauffeur();});
+    document.addEventListener('click',e=>{
+      const cli=e.target.closest&&e.target.closest('[data-chcli]');if(cli){chauffeurClient(cli.dataset.chcli);return;}
+      const cha=e.target.closest&&e.target.closest('[data-chchantier]');if(cha){chauffeurChantier(cha.dataset.chchantier);}
+    });
     function modeChauffeur(){
       document.querySelectorAll('.nav-item[data-view]').forEach(b=>{b.style.display='none';});
       const lbls=document.querySelectorAll('.nav-lbl');lbls.forEach(l=>l.style.display='none');

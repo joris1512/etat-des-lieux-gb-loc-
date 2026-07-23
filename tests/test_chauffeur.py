@@ -36,18 +36,19 @@ def test_chauffeur_acces_constats_mais_pas_au_reste():
     _comptes()
     tc = TestClient(app)
     auth = ("chauffeur1", "motdepasse8")
-    # Autorisé : son espace.
+    # Autorisé : son espace + la NAVIGATION en lecture (clients / chantiers) pour retrouver
+    # un devis ou un état des lieux.
     assert tc.get("/etat", auth=auth).status_code == 200
     assert tc.get("/constats", auth=auth).status_code == 200
     assert tc.get("/", auth=auth).status_code == 200
-    # Interdit : tout le reste de l'application.
-    assert tc.get("/clients", auth=auth).status_code == 403
+    assert tc.get("/clients", auth=auth).status_code == 200          # lecture autorisée
+    assert tc.get("/chantiers/999999", auth=auth).status_code == 404  # autorisé (chantier absent)
+    # Interdit : les autres rubriques et toute écriture.
     assert tc.get("/historique", auth=auth).status_code == 403
     assert tc.get("/stats", auth=auth).status_code == 403
     assert tc.get("/modeles", auth=auth).status_code == 403
     assert tc.get("/utilisateurs", auth=auth).status_code == 403
-    # L'admin, lui, passe partout.
-    assert tc.get("/clients", auth=("admin", "motdepasse8")).status_code == 200
+    assert tc.post("/clients/importer-csv", auth=auth).status_code == 403
 
 
 def test_etat_expose_le_role():

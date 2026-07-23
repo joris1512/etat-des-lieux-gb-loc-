@@ -76,7 +76,8 @@ def test_session_chauffeur_reste_cloisonnee():
     tc = TestClient(app)
     tc.post("/connexion", json={"identifiant": "chauffeur1", "mot_de_passe": "motdepasse8"})
     assert tc.get("/constats").status_code == 200
-    assert tc.get("/clients").status_code == 403
+    assert tc.get("/clients").status_code == 200      # navigation en lecture autorisée
+    assert tc.get("/historique").status_code == 403   # mais pas les autres rubriques
 
 
 def test_session_falsifiee_refusee():

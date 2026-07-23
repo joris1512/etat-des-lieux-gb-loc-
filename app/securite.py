@@ -222,8 +222,20 @@ _PREFIXES_CHAUFFEUR = (
 )
 
 
-def _chemin_autorise_chauffeur(chemin: str) -> bool:
-    return chemin == "/" or any(chemin.startswith(p) for p in _PREFIXES_CHAUFFEUR)
+def _chemin_autorise_chauffeur(methode: str, chemin: str) -> bool:
+    """Le chauffeur accède à ses constats, ET peut NAVIGUER (lecture) dans les clients/chantiers
+    pour retrouver un devis / un état des lieux, ET ajouter un document à un chantier (scan)."""
+    if chemin == "/" or any(chemin.startswith(p) for p in _PREFIXES_CHAUFFEUR):
+        return True
+    # Navigation en LECTURE : liste et fiches clients, contenu des chantiers, documents.
+    if methode == "GET" and (
+        chemin == "/clients" or chemin.startswith("/clients/") or chemin.startswith("/chantiers/")
+    ):
+        return True
+    # Ajout d'un document au dossier d'un chantier (POST /chantiers/{id}/documents).
+    if methode == "POST" and chemin.startswith("/chantiers/") and chemin.endswith("/documents"):
+        return True
+    return False
 
 
 def utilisateur_courant(request: Request) -> str:
@@ -270,8 +282,8 @@ _CHEMINS_PUBLICS = ("/connexion", "/deconnexion", "/manifest.json", "/sw.js")
 
 def _valide_et_gate_chauffeur(request: Request, identifiant: str, role: str) -> None:
     request.state.utilisateur, request.state.role = identifiant, role
-    # Rôle « chauffeur » : accès limité aux constats (et à rien d'autre).
-    if role == "chauffeur" and not _chemin_autorise_chauffeur(request.url.path):
+    # Rôle « chauffeur » : constats + navigation lecture clients/chantiers + ajout de documents.
+    if role == "chauffeur" and not _chemin_autorise_chauffeur(request.method, request.url.path):
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Accès réservé — votre compte chauffeur ne couvre que les constats.",

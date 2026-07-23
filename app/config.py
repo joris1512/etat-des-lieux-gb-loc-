@@ -10,7 +10,7 @@ from pathlib import Path
 from pydantic import Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
-VERSION = "2.5.1"
+VERSION = "2.6.0"
 
 # Racine du projet = dossier parent de `app/`.
 # En mode « figé » (.exe PyInstaller --onedir), la racine est le dossier de l'exécutable
@@ -59,6 +59,7 @@ CORRESPONDANCES_CSV = RACINE / "correspondances.csv"
 FIXTURES_DIR = RACINE / "fixtures"
 RUNTIME_DIR = DONNEES_DIR / "runtime"
 SORTIES_DIR = RUNTIME_DIR / "sorties"
+DOCUMENTS_DIR = RUNTIME_DIR / "documents"  # pièces jointes aux chantiers (scans, PDF, photos…)
 HTML_DIR = RACINE / "app" / "templates_html"
 STATIC_DIR = RACINE / "app" / "static"
 

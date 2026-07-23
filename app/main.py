@@ -22,6 +22,7 @@ from fastapi.staticfiles import StaticFiles
 from app import courriel, db, import_csv, securite, terrain
 from app.assemblage import construire_plan, resoudre_modele
 from app.config import (
+    DOCUMENTS_DIR,
     DONNEES_DIR,
     HTML_DIR,
     RACINE,
@@ -647,6 +648,81 @@ def chantier_detail_endpoint(chantier_id: int) -> dict:
     if not ch:
         raise HTTPException(status_code=404, detail="Chantier introuvable.")
     return ch
+
+
+# --------------------------------------------------------------------------- #
+# Documents attachés à un chantier (scans, PDF, photos) — bureau et terrain
+# --------------------------------------------------------------------------- #
+_DOC_TYPES = {
+    ".pdf": "application/pdf",
+    ".jpg": "image/jpeg", ".jpeg": "image/jpeg", ".png": "image/png",
+    ".heic": "image/heic", ".webp": "image/webp", ".gif": "image/gif",
+    ".xlsx": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    ".xls": "application/vnd.ms-excel",
+    ".docx": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+    ".doc": "application/msword",
+}
+_DOC_MAX = 20 * 1024 * 1024  # 20 Mo par document
+
+
+def _dossier_documents(chantier_id: int) -> Path:
+    d = DOCUMENTS_DIR / str(chantier_id)
+    d.mkdir(parents=True, exist_ok=True)
+    return d
+
+
+@app.post("/chantiers/{chantier_id}/documents")
+async def chantier_document_ajouter(
+    chantier_id: int, request: Request, fichier: UploadFile = File(...)
+) -> dict:
+    """Ajoute un document (scan / PDF / photo / Excel / Word) au dossier d'un chantier."""
+    nom = Path((fichier.filename or "").replace("\\", "/")).name
+    ext = Path(nom).suffix.lower()
+    if ext not in _DOC_TYPES:
+        raise HTTPException(status_code=400, detail="Format accepté : PDF, image, Excel ou Word.")
+    contenu = await _lire_borne(fichier, _DOC_MAX)
+    if not contenu:
+        raise HTTPException(status_code=400, detail="Fichier vide.")
+    doc = db.ajouter_document_chantier(
+        chantier_id, nom_affiche=nom, ext=ext, taille=len(contenu),
+        ajoute_par=utilisateur_courant(request),
+    )
+    if doc is None:
+        raise HTTPException(status_code=404, detail="Chantier introuvable.")
+    (_dossier_documents(chantier_id) / doc["nom_stocke"]).write_bytes(contenu)
+    db.journaliser(
+        "document",
+        f"Document ajouté au chantier {chantier_id} : {doc['nom_affiche']} par {utilisateur_courant(request)}",
+    )
+    return db.lire_chantier(chantier_id)
+
+
+@app.get("/chantiers/{chantier_id}/documents/{doc_id}")
+def chantier_document_lire(chantier_id: int, doc_id: int) -> FileResponse:
+    """Sert un document du chantier (téléchargement / aperçu)."""
+    doc = db.lire_document_chantier(doc_id)
+    if not doc or doc["chantier_id"] != chantier_id:
+        raise HTTPException(status_code=404, detail="Document introuvable.")
+    base = _dossier_documents(chantier_id).resolve()
+    cible = (base / Path(doc["nom_stocke"]).name).resolve()
+    if cible.parent != base or not cible.exists():
+        raise HTTPException(status_code=404, detail="Fichier introuvable.")
+    media = _DOC_TYPES.get(cible.suffix.lower(), "application/octet-stream")
+    return FileResponse(cible, filename=doc["nom_affiche"], media_type=media)
+
+
+@app.delete("/chantiers/{chantier_id}/documents/{doc_id}")
+def chantier_document_supprimer(chantier_id: int, doc_id: int, request: Request) -> dict:
+    """Supprime un document du chantier — réservé aux administrateurs."""
+    exiger_admin(request)
+    doc = db.lire_document_chantier(doc_id)
+    if not doc or doc["chantier_id"] != chantier_id:
+        raise HTTPException(status_code=404, detail="Document introuvable.")
+    db.supprimer_document_chantier(doc_id)
+    cible = _dossier_documents(chantier_id).resolve() / Path(doc["nom_stocke"]).name
+    cible.unlink(missing_ok=True)
+    logger.info("AUDIT document supprimé (chantier %s) par %s", chantier_id, utilisateur_courant(request))
+    return db.lire_chantier(chantier_id)
 
 
 @app.get("/stats/avancees")
