@@ -106,6 +106,13 @@ Routes clés : `/` (UI), `/analyser`, `/generer`, `/generer-revise`, `/telecharg
   `docs/DEPLOIEMENT_VPS.md` : OVH Debian 12, Caddy HTTPS auto, systemd, sauvegardes). (144 tests verts.)
   **Décision produit : cible = hébergement VPS français (option « pro ») ; l'accès LAN du poste bureau
   est abandonné pour les chauffeurs (pare-feu domaine sans droits admin + chauffeurs en 4G).**
+- v2.6 : **espace chauffeurs — navigation + documents.** Le chauffeur recherche un client → ouvre le
+  chantier (devis, états des lieux avec Constat/Télécharger, documents). Accès **lecture seule** aux
+  clients/chantiers via garde méthode-consciente (`securite._chemin_autorise_chauffeur(methode, chemin)`).
+  **Documents de chantier** : table `documents_chantier` + `DOCUMENTS_DIR` (`runtime/documents/{id}/`,
+  nom stocké `{doc_id}{ext}` = anti-traversal) ; endpoints `POST/GET/DELETE /chantiers/{id}/documents`
+  (ajout chauffeur+bureau, suppression admin, 20 Mo, images compressées client) ; bloc « Documents »
+  réutilisé bureau + chauffeur (`htmlDocuments`/`brancherDocuments`). (160 tests verts.)
 
 **Reste à faire (prochaines briques) :**
 1. **Brancher les vrais modèles.** Les `.xls` du client (dans `P:\Joris\etat des lieux`, **originaux à ne
