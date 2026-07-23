@@ -70,12 +70,29 @@ def migrer_donnees_programme(racine=None, donnees=None, runtime=None) -> None:
         logger.info("Clé API migrée vers le dossier protégé : %s", donnees)
 
 
+def _base_sans_donnees(db_path: Path) -> bool:
+    """True si la base existe mais ne contient NI compte NI client (base « vierge »)."""
+    import sqlite3
+
+    try:
+        cx = sqlite3.connect(db_path)
+        try:
+            u = cx.execute("SELECT COUNT(*) FROM utilisateurs").fetchone()[0]
+            c = cx.execute("SELECT COUNT(*) FROM clients").fetchone()[0]
+            return u == 0 and c == 0
+        finally:
+            cx.close()
+    except Exception:  # noqa: BLE001 — en cas de doute, on NE considère PAS la base vide (pas d'écrasement)
+        return False
+
+
 def migrer_depuis_ancien_dossier(ancien=None, runtime=None) -> None:
     """Migre les données de l'ANCIEN emplacement local (%LOCALAPPDATA%) vers le dossier
     PARTAGÉ du serveur, au premier lancement de la version « données partagées ».
 
-    Ne s'exécute que si le dossier partagé n'a pas ENCORE de base : les données du poste qui
-    ouvre l'application en premier (celui qui a l'historique) amorcent la base commune."""
+    Amorçage : les données du poste qui a l'historique alimentent la base commune tant que
+    celle-ci n'existe pas OU est encore vierge (aucun compte ni client) — ainsi, même si un
+    poste vide a créé la base partagée en premier, le poste qui détient les données la remplit."""
     from app.config import ANCIEN_DONNEES_DIR
 
     ancien = ancien if ancien is not None else ANCIEN_DONNEES_DIR
@@ -83,8 +100,10 @@ def migrer_depuis_ancien_dossier(ancien=None, runtime=None) -> None:
     if not ancien or ancien == DONNEES_DIR:
         return
     ancien_runtime = ancien / "runtime"
-    # Migration UNIQUEMENT si le partagé est vierge (pas de base) et que l'ancien en a une.
-    if (ancien_runtime / "gb.db").is_file() and not (runtime / "gb.db").exists():
+    partage_db = runtime / "gb.db"
+    if (ancien_runtime / "gb.db").is_file() and (
+        not partage_db.exists() or _base_sans_donnees(partage_db)
+    ):
         runtime.mkdir(parents=True, exist_ok=True)
         for item in ancien_runtime.iterdir():
             cible = runtime / item.name
@@ -92,7 +111,7 @@ def migrer_depuis_ancien_dossier(ancien=None, runtime=None) -> None:
                 if not cible.exists():
                     shutil.copytree(item, cible)
             else:
-                shutil.copy2(item, cible)
+                shutil.copy2(item, cible)  # écrase une base partagée encore vierge
         logger.info("Données reprises depuis l'ancien poste vers le dossier partagé : %s", runtime)
     # La clé API éventuellement posée à l'ancien emplacement suit aussi.
     ancien_env = ancien / ".env"

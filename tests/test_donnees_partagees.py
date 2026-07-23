@@ -59,6 +59,28 @@ def test_migration_ne_pas_ecraser_le_partage(tmp_path, monkeypatch):
     cx.close()
 
 
+def test_migration_amorce_une_base_partagee_vierge(tmp_path, monkeypatch):
+    """Si le partagé existe mais est VIERGE (0 compte, 0 client — créé par un poste vide),
+    les données du poste qui a l'historique l'amorcent quand même."""
+    ancien = tmp_path / "ancien"
+    partage = tmp_path / "serveur"
+    _fabriquer_ancienne_base(ancien)
+    # Base partagée « vierge » : vrai schéma (utilisateurs + clients) mais aucune donnée.
+    (partage / "runtime").mkdir(parents=True)
+    cx = sqlite3.connect(partage / "runtime" / "gb.db")
+    cx.execute("CREATE TABLE utilisateurs (id INTEGER)")
+    cx.execute("CREATE TABLE clients (id INTEGER)")
+    cx.commit()
+    cx.close()
+    monkeypatch.setattr(main, "DONNEES_DIR", partage)
+
+    main.migrer_depuis_ancien_dossier(ancien=ancien, runtime=partage / "runtime")
+
+    cx = sqlite3.connect(partage / "runtime" / "gb.db")
+    assert cx.execute("SELECT v FROM t").fetchone()[0] == "donnee-du-poste"
+    cx.close()
+
+
 def test_detection_reseau():
     # Un chemin UNC est reconnu comme réseau ; un dossier temporaire local ne l'est pas.
     assert _est_reseau(Path(r"\\serveur\partage\gb")) is True
