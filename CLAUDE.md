@@ -113,6 +113,15 @@ Routes clés : `/` (UI), `/analyser`, `/generer`, `/generer-revise`, `/telecharg
   nom stocké `{doc_id}{ext}` = anti-traversal) ; endpoints `POST/GET/DELETE /chantiers/{id}/documents`
   (ajout chauffeur+bureau, suppression admin, 20 Mo, images compressées client) ; bloc « Documents »
   réutilisé bureau + chauffeur (`htmlDocuments`/`brancherDocuments`). (160 tests verts.)
+- v2.7 : **constat pro en 2 temps + checklist par partie.** Le constat se fait en **Début de loc**
+  (départ → colonne C, signature GAUCHE ≈ A48) et **Fin de loc** (retour → colonne F, signature
+  DROITE ≈ E48) sur le même document ; chaque temps est indépendant (signer l'un le fige sans bloquer
+  l'autre). Pour chaque **partie** du module (lue et **regroupée** depuis le formulaire via
+  `terrain.analyser_parties`, donc adaptée à chaque bloc), le chauffeur choisit **Bon / Sale / Cassé**
+  + note → reporté dans la bonne colonne (`_texte_etat`). `patch_xlsx.inserer_image(..., cle=)` permet
+  **2 signatures** (`signature_debut.png` / `signature_fin.png`) qui coexistent. **Décision produit :
+  la checklist est LUE DU FORMULAIRE (déterministe, zéro invention), PAS générée par IA** — l'IA reste
+  pour lire le devis. (163 tests verts, ruff clean.)
 
 **Reste à faire (prochaines briques) :**
 1. **Brancher les vrais modèles.** Les `.xls` du client (dans `P:\Joris\etat des lieux`, **originaux à ne
