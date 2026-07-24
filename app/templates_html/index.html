@@ -252,14 +252,29 @@
       .nav-item{width:auto;} .nav-item.active::before{display:none;} .grid4{grid-template-columns:repeat(2,1fr);} .row2,.clist{grid-template-columns:1fr;} .main{padding:22px 16px 50px;} h1.title{font-size:32px;}
     }
 
+    /* Constat : bascule de phase + checklist par partie (Bon / Sale / Cassé) */
+    .phasetog{display:flex;gap:5px;background:var(--surface2);border:1px solid var(--bd2);border-radius:13px;padding:4px;margin-bottom:12px;}
+    .phasetog button{flex:1;height:42px;border:0;background:none;color:var(--muted);font-weight:700;font-size:13px;border-radius:9px;cursor:pointer;font-family:var(--sans);transition:.15s;}
+    .phasetog button.on{background:linear-gradient(115deg,var(--green),var(--teal));color:#03251a;box-shadow:0 8px 20px -10px var(--green-glow);}
+    .citem{padding:13px 4px;border-bottom:1px solid rgba(150,220,190,.07);}
+    .citem .nm{font-size:14px;font-weight:600;margin-bottom:9px;}
+    .conds{display:flex;gap:8px;margin-bottom:8px;}
+    .cbtn{flex:1;height:42px;border-radius:11px;border:1px solid var(--bd2);background:rgba(255,255,255,.03);color:var(--muted);font-weight:700;font-size:13.5px;cursor:pointer;font-family:var(--sans);transition:.15s;}
+    .cbtn:hover{border-color:var(--bd2);} .cbtn:disabled{opacity:.5;cursor:default;}
+    .cbtn.on.bon{background:var(--green-soft);border-color:var(--green);color:#8ef0b6;}
+    .cbtn.on.sale{background:rgba(255,176,46,.16);border-color:var(--amber);color:#ffd27a;}
+    .cbtn.on.casse{background:var(--red-soft);border-color:var(--red);color:#ff9a92;}
+    .cnote{width:100%;height:40px;border-radius:10px;background:var(--surface2);border:1px solid var(--bd2);color:var(--ink);font-size:13.5px;padding:0 12px;font-family:var(--sans);}
+    .cnote:focus{outline:none;border-color:var(--green);} .cnote:disabled{opacity:.6;}
+
     /* Téléphone (chauffeurs sur chantier) : constat plein écran, cibles tactiles larges */
     @media (max-width:640px){
       .main{padding:16px 12px 40px;} h1.title{font-size:26px;} .grid4{grid-template-columns:1fr 1fr;}
       .btn{min-height:44px;} input,select{min-height:44px;font-size:16px;} /* 16px = pas de zoom iOS */
       #constat-overlay > div{margin:0 auto;padding:0 8px 30px;}
       #constat-overlay .card{border-radius:16px;padding:16px 12px;}
-      #ct-lignes{max-height:none;}
-      #ct-lignes table{font-size:13px;} #ct-lignes td:first-child{width:34% !important;font-size:12px;}
+      #ct-parties{max-height:none;}
+      .cbtn{font-size:13px;} .phasetog button{font-size:12px;}
       #ct-canvas{width:100%;height:auto;}
       #constat-overlay .actions .btn, #ct-envoyer{width:100%;}
       #ct-photo{max-width:100% !important;}
@@ -550,15 +565,19 @@
           <div style="flex:1;min-width:240px"><div class="eyebrow">// MODE CHAUFFEUR</div><h2 id="ct-titre" style="margin:6px 0 0;font-size:19px"></h2></div>
           <button type="button" class="btn btn-ghost" id="ct-fermer">Fermer</button>
         </div>
-        <div class="card-h" style="margin-top:18px">Constat — état réel (début / fin de location)</div>
-        <div id="ct-lignes" style="max-height:44vh;overflow:auto"></div>
+        <div class="phasetog" id="ct-phasetog" style="margin-top:16px">
+          <button type="button" data-p="debut" class="on">Début de loc · départ</button>
+          <button type="button" data-p="fin">Fin de loc · retour</button>
+        </div>
+        <p class="hint" id="ct-phase-aide" style="margin:0 0 14px;line-height:1.5">État du module <b id="ct-phlabel" style="color:var(--muted)">au DÉPART (début de location)</b>. Pour chaque partie : <b style="color:#8ef0b6">Bon</b>, <b style="color:#ffd27a">Sale</b> ou <b style="color:#ff9a92">Cassé</b>, + une note si besoin.</p>
+        <div id="ct-parties" style="max-height:44vh;overflow:auto"></div>
         <div class="card-h" style="margin-top:18px">Photos</div>
         <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap">
           <input type="file" id="ct-photo" accept="image/jpeg,image/png" capture="environment" multiple style="max-width:320px">
           <span class="hint">JPEG/PNG · 8 Mo max · prises directement à l'appareil sur tablette</span>
         </div>
         <div id="ct-photos" style="display:flex;gap:10px;flex-wrap:wrap;margin-top:10px"></div>
-        <div class="card-h" style="margin-top:18px">Signature du client — « bon pour accord »</div>
+        <div class="card-h" style="margin-top:18px" id="ct-sign-label">Signature du client — début de location</div>
         <div style="display:flex;gap:14px;flex-wrap:wrap;align-items:flex-start">
           <canvas id="ct-canvas" width="560" height="150" style="background:#fff;border-radius:10px;touch-action:none;border:2px solid var(--bd2)"></canvas>
           <div style="display:flex;flex-direction:column;gap:10px;min-width:220px">
@@ -881,45 +900,62 @@
     /* MODE CHAUFFEUR (constat terrain) */
     let ctx=null; // {job, nom}
     const ctUrl=(suffixe='')=>`/terrain/${encodeURIComponent(ctx.job)}/${encodeURIComponent(ctx.nom)}${suffixe}`;
+    let ctData=null, ctPhase='debut';   // constat courant + temps affiché (début/fin)
+    function renderParties(){
+      const box=$('#ct-parties');const parties=(ctData&&ctData.parties)||[];
+      const signe=!!(ctData&&ctData[ctPhase]&&ctData[ctPhase].signe);
+      box.innerHTML=parties.length?parties.map(p=>{
+        const cur=p[ctPhase]||{};const etat=cur.etat||'',note=cur.note||'';
+        const b=(k,lbl)=>`<button type="button" class="cbtn ${k}${etat===k?' on':''}" data-etat="${k}"${signe?' disabled':''}>${lbl}</button>`;
+        return `<div class="citem" data-cle="${esc(p.cle)}"><div class="nm">${esc(p.libelle)}</div><div class="conds">${b('bon','Bon')}${b('sale','Sale')}${b('casse','Cassé')}</div><input class="cnote" placeholder="Préciser si besoin (ex. vitre fissurée)…" value="${esc(note)}"${signe?' disabled':''}></div>`;
+      }).join(''):'<div class="empty"><p>Aucune partie à contrôler détectée sur ce document.</p></div>';
+    }
+    function majPhaseUI(){
+      document.querySelectorAll('#ct-phasetog button').forEach(b=>b.classList.toggle('on',b.dataset.p===ctPhase));
+      const fin=ctPhase==='fin';
+      $('#ct-phlabel').textContent=fin?'au RETOUR (fin de location)':'au DÉPART (début de location)';
+      $('#ct-sign-label').textContent='Signature du client — '+(fin?'fin de location (retour)':'début de location (départ)');
+      const bloc=(ctData&&ctData[ctPhase])||{};const signe=!!bloc.signe;
+      $('#ct-signataire').value=bloc.signataire||'';$('#ct-fonction').value=bloc.fonction||'';
+      $('#ct-signe').textContent=signe?`Signé${bloc.signataire?' par '+bloc.signataire:''}${bloc.fonction?' ('+bloc.fonction+')':''} ✔`:'';
+      ['#ct-save','#ct-signer','#ct-signataire','#ct-fonction','#ct-accord','#ct-effacer'].forEach(s=>{const el=$(s);if(el)el.disabled=signe;});
+      const av=$('#ct-verrou');if(av){av.style.display=signe?'block':'none';av.textContent='« '+(fin?'Fin':'Début')+' de location » signé — cette partie est verrouillée (preuve). L\'autre temps se fait plus tard, sur le même document.';}
+    }
     function renderConstat(d){
+      ctData=d;
       $('#ct-titre').textContent=ctx.nom.replace(/\.xlsx$/,'');
-      $('#ct-lignes').innerHTML='<table class="tbl"><thead><tr><th>Élément</th><th>Début de loc</th><th>Fin de loc</th></tr></thead><tbody>'+
-        (d.lignes||[]).map(l=>`<tr><td style="width:38%">${esc(l.libelle)}</td><td><input data-ct-l="${l.ligne}" data-ct-k="debut" value="${esc(l.debut||'')}" style="width:100%"></td><td><input data-ct-l="${l.ligne}" data-ct-k="fin" value="${esc(l.fin||'')}" style="width:100%"></td></tr>`).join('')+'</tbody></table>';
+      renderParties();
       $('#ct-photos').innerHTML=(d.photos||[]).map(p=>`<img src="/terrain-fichier/${encodeURIComponent(ctx.job)}/${encodeURIComponent(ctx.nom)}/${encodeURIComponent(p)}" style="height:84px;border-radius:8px;border:1px solid var(--bd2)" title="${esc(p)}">`).join('')||'<span class="hint">aucune photo</span>';
-      $('#ct-signe').textContent=d.signature?`Signé${d.signataire?' par '+d.signataire:''}${d.fonction?' ('+d.fonction+')':''} ✔`:'';
-      if(d.signataire)$('#ct-signataire').value=d.signataire;
-      if(d.fonction)$('#ct-fonction').value=d.fonction;
-      // Constat signé = preuve figée : on verrouille les relevés et la re-signature.
-      const verrou=!!d.signe;
-      $('#ct-lignes').querySelectorAll('input').forEach(i=>i.disabled=verrou);
-      ['#ct-save','#ct-signer','#ct-signataire','#ct-fonction','#ct-accord','#ct-effacer'].forEach(s=>{const el=$(s);if(el)el.disabled=verrou;});
-      const av=$('#ct-verrou');if(av)av.style.display=verrou?'block':'none';
+      majPhaseUI();
       const pdfBtn=$('#ct-voir-pdf');
       if(d.pdf){pdfBtn.style.display='';pdfBtn.href=`/terrain-fichier/${encodeURIComponent(ctx.job)}/${encodeURIComponent(ctx.nom)}/constat.pdf`;}else pdfBtn.style.display='none';
     }
-    /* Collecte les relevés saisis à l'écran (partagé entre « Enregistrer » et « Signer »). */
-    function collecterLignes(){
-      const map={};
-      $('#ct-lignes').querySelectorAll('[data-ct-l]').forEach(i=>{const l=i.dataset.ctL;map[l]=map[l]||{ligne:parseInt(l,10),libelle:'',debut:'',fin:''};map[l][i.dataset.ctK]=i.value;});
-      $('#ct-lignes').querySelectorAll('tbody tr').forEach(tr=>{const inp=tr.querySelector('[data-ct-l]');if(inp)map[inp.dataset.ctL].libelle=tr.cells[0].textContent;});
-      return Object.values(map);
+    /* Sélection d'un état (Bon/Sale/Cassé) sur une partie */
+    $('#ct-parties').addEventListener('click',e=>{const btn=e.target.closest&&e.target.closest('.cbtn');if(!btn||btn.disabled)return;btn.parentElement.querySelectorAll('.cbtn').forEach(b=>b.classList.remove('on'));btn.classList.add('on');});
+    /* Bascule Début / Fin de location */
+    $('#ct-phasetog').addEventListener('click',e=>{const b=e.target.closest&&e.target.closest('button[data-p]');if(!b)return;ctPhase=b.dataset.p;renderParties();majPhaseUI();effacerCanvas();});
+    /* Collecte l'état choisi + note par partie, pour la phase courante. */
+    function collecterSaisies(){
+      const out={};
+      $('#ct-parties').querySelectorAll('.citem').forEach(it=>{const on=it.querySelector('.cbtn.on');const note=(it.querySelector('.cnote')||{}).value||'';out[it.dataset.cle]={etat:on?on.dataset.etat:'',note:note};});
+      return out;
     }
-    async function enregistrerLignes(){
-      const r=await fetch(ctUrl(),{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({lignes:collecterLignes()})});
+    async function enregistrerSaisies(){
+      const r=await fetch(ctUrl(),{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({phase:ctPhase,saisies:collecterSaisies()})});
       const d=await r.json();if(!r.ok)throw new Error(d.detail||'Erreur');return d;
     }
     // Le brouillon Outlook n'a de sens que sur le poste de bureau (Windows local) : masqué à distance.
     (function(){const local=['localhost','127.0.0.1'].includes(location.hostname);const b=$('#ct-partager');if(b&&local)b.style.display='';})();
     async function ouvrirConstat(dlUrl){
       const m=dlUrl.match(/^\/telecharger\/([^/]+)\/(.+)$/);if(!m)return;
-      ctx={job:decodeURIComponent(m[1]),nom:decodeURIComponent(m[2])};
+      ctx={job:decodeURIComponent(m[1]),nom:decodeURIComponent(m[2])};ctPhase='debut';
       try{const r=await fetch(ctUrl());const d=await r.json();if(!r.ok)throw new Error(d.detail||'Constat indisponible');renderConstat(d);effacerCanvas();$('#constat-overlay').style.display='block';window.scrollTo({top:0});}
       catch(e){toast(e.message,'bad');}
     }
     document.addEventListener('click',e=>{const o=e.target.closest&&e.target.closest('[data-constat]');if(o){e.preventDefault();ouvrirConstat(o.dataset.constat);}});
     $('#ct-fermer').addEventListener('click',()=>{$('#constat-overlay').style.display='none';});
     $('#ct-save').addEventListener('click',async()=>{
-      try{const d=await enregistrerLignes();toast('Constat enregistré dans le document Excel.','ok');renderConstat(d);}
+      try{const d=await enregistrerSaisies();toast('Constat ('+(ctPhase==='fin'?'fin':'début')+' de loc) enregistré dans le document.','ok');renderConstat(d);}
       catch(e){toast(e.message,'bad');}
     });
     /* Compression côté navigateur : les photos de chantier partent en secondes même en 4G. */
@@ -954,12 +990,12 @@
       if(!$('#ct-signataire').value.trim()){toast('Indiquez le nom du signataire (élément de preuve).','bad');return;}
       if(!$('#ct-accord').checked){toast('Le signataire doit cocher « lu et approuvé ».','bad');return;}
       try{
-        // On fige d'abord les relevés dans le document, PUIS on signe : l'empreinte porte donc
-        // sur le document complet (relevés inclus) et le constat est verrouillé ensuite.
-        await enregistrerLignes();
-        const r=await fetch(ctUrl('/signature'),{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({image:cv.toDataURL('image/png'),signataire:$('#ct-signataire').value,fonction:$('#ct-fonction').value,accord:$('#ct-accord').checked})});
+        // On fige d'abord l'état de cette phase dans le document, PUIS on signe : l'empreinte
+        // porte sur le document (relevés inclus) et cette phase est verrouillée ensuite.
+        await enregistrerSaisies();
+        const r=await fetch(ctUrl('/signature'),{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({image:cv.toDataURL('image/png'),signataire:$('#ct-signataire').value,fonction:$('#ct-fonction').value,accord:$('#ct-accord').checked,phase:ctPhase})});
         const d=await r.json();if(!r.ok)throw new Error(d.detail||'Erreur');
-        toast('Signature enregistrée dans le document — preuve horodatée constituée.','ok');renderConstat(d);
+        toast('Signature « '+(ctPhase==='fin'?'fin':'début')+' de location » reportée sur l\'état des lieux.','ok');renderConstat(d);
       }catch(e){toast(e.message,'bad');}
     });
     $('#ct-envoyer').addEventListener('click',async()=>{

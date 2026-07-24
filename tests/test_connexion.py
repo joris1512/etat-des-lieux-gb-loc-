@@ -119,9 +119,10 @@ def test_constat_verrouille_apres_signature(tmp_path):
     shutil.copy(MODELE, doc)
     dossier = tmp_path / "constat"
     dossier.mkdir()
-    terrain.enregistrer_signature(dossier, PNG, "M. Client", document=doc, accord=True)
+    cle = terrain.analyser_parties(doc, None)[0]["cle"]
+    terrain.enregistrer_signature(dossier, PNG, "M. Client", document=doc, accord=True, phase="debut")
     with __import__("pytest").raises(terrain.ConstatSigne):
-        terrain.enregistrer_constat(doc, None, [{"ligne": 10, "debut": "OK", "fin": ""}], dossier)
+        terrain.enregistrer_constat(doc, None, "debut", {cle: {"etat": "bon"}}, dossier)
 
 
 # ---------------------------------------------------------------- proxy / IP
@@ -156,7 +157,7 @@ def test_signature_construit_le_dossier_de_preuve(tmp_path):
     dossier = tmp_path / "constat"
     dossier.mkdir()
     empreinte = terrain.enregistrer_signature(
-        dossier, PNG, "M. Client", document=doc, fonction="Chef de chantier"
+        dossier, PNG, "M. Client", document=doc, fonction="Chef de chantier", phase="debut"
     )
     assert empreinte and len(empreinte) == 64
     import hashlib
@@ -165,11 +166,12 @@ def test_signature_construit_le_dossier_de_preuve(tmp_path):
     # L'empreinte correspond exactement au fichier signé (signature incluse).
     assert empreinte == hashlib.sha256(doc.read_bytes()).hexdigest()
     with zipfile.ZipFile(doc) as z:
-        assert "xl/media/signature_gb.png" in z.namelist()
-    data = json.loads((dossier / "constat.json").read_text(encoding="utf-8"))
-    assert data["fonction"] == "Chef de chantier"
-    assert data["empreinte_sha256"] == empreinte
-    assert data["signe_le_iso"]
+        assert "xl/media/signature_debut.png" in z.namelist()
+    # Le dossier de preuve est rangé par phase.
+    bloc = json.loads((dossier / "constat.json").read_text(encoding="utf-8"))["debut"]
+    assert bloc["fonction"] == "Chef de chantier"
+    assert bloc["empreinte_sha256"] == empreinte
+    assert bloc["signe_le_iso"]
 
 
 def test_journaliser_trace_l_evenement():

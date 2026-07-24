@@ -10,7 +10,7 @@ from pathlib import Path
 from pydantic import Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
-VERSION = "2.6.0"
+VERSION = "2.7.0"
 
 # Racine du projet = dossier parent de `app/`.
 # En mode « figé » (.exe PyInstaller --onedir), la racine est le dossier de l'exécutable

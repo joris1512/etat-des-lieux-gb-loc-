@@ -1,9 +1,14 @@
-"""Mode chauffeur (terrain) : constat début/fin, photos, signature électronique, PDF.
+"""Mode chauffeur (terrain) : constat en DEUX temps, cases par partie, 2 signatures, PDF.
 
-Le document Excel généré reste la référence : les valeurs saisies sont écrites dans ses
-colonnes « Début de loc » (C) / « Fin de loc » (F) via patch_xlsx (logo et perspectives
-préservés). Un dossier « constat - <document> » accolé au document reçoit les photos, la
-signature et le PDF de constat ; l'état de saisie vit dans constat.json (rechargeable).
+L'état des lieux se fait en deux moments sur LE MÊME document :
+- « Début de location » (au départ du module) : colonne C, signature côté GAUCHE (col A).
+- « Fin de location »   (au retour du module)  : colonne F, signature côté DROITE (col E).
+
+Pour chaque PARTIE du module (murs, porte, coffret électrique, sol…) — lues directement dans le
+formulaire, donc adaptées à chaque type de bloc — le chauffeur choisit l'état : Bon / Sale / Cassé
+(+ note). Le texte est reporté dans la bonne colonne de l'Excel (logo et perspectives préservés via
+patch_xlsx). Chaque phase, une fois signée, est FIGÉE (preuve). L'état de saisie vit dans
+constat.json ; le dossier « constat - <document> » reçoit photos, signatures et PDF.
 """
 
 from __future__ import annotations
@@ -19,16 +24,21 @@ from openpyxl import load_workbook
 from app import patch_xlsx
 
 PHOTOS_MAX = 20
-_POINTILLES = {".", "…", " ", " "}
+_POINTILLES = {".", "…", " ", " "}
+_COL_DEBUT, _COL_FIN = 3, 6  # colonnes C (début de loc) et F (fin de loc)
+PHASES = ("debut", "fin")
+
+# Libellés d'état reportés dans l'Excel (le choix « clé » de l'UI → texte du document).
+ETATS = {"bon": "Bon état", "sale": "Sale", "casse": "Cassé", "reparer": "À réparer"}
 
 
 def _est_pointille(v) -> bool:
-    """True si la cellule ne contient qu'un gabarit de pointillés (ligne à remplir)."""
+    """True si la cellule ne contient qu'un gabarit de pointillés (case à remplir)."""
     return isinstance(v, str) and len(v.strip()) > 3 and set(v.strip()) <= _POINTILLES
 
 
 def dossier_constat(job_dir: Path, nom_fichier: str) -> Path:
-    """Dossier des pièces du constat (photos, signature, PDF), accolé au document."""
+    """Dossier des pièces du constat (photos, signatures, PDF), accolé au document."""
     d = job_dir / f"constat - {Path(nom_fichier).stem}"
     d.mkdir(parents=True, exist_ok=True)
     return d
@@ -38,87 +48,115 @@ def _chemin_json(dossier: Path) -> Path:
     return dossier / "constat.json"
 
 
-def lignes_depuis_modele(chemin: Path, feuille: str | None) -> list[dict]:
-    """Repère les lignes d'inspection du document : libellé (col. A) + cases C/F en pointillés."""
+def _feuille(wb, feuille):
+    return wb[feuille] if feuille and feuille in wb.sheetnames else wb[wb.sheetnames[0]]
+
+
+def analyser_parties(chemin: Path, feuille: str | None) -> list[dict]:
+    """PARTIES à contrôler, lues dans le formulaire et REGROUPÉES : une entrée par partie,
+    même si elle couvre plusieurs lignes du modèle (ex. « Coffret électrique » sur 2 lignes).
+
+    S'adapte automatiquement au type de bloc (chaque état des lieux liste ses propres parties)."""
     wb = load_workbook(chemin, data_only=True)
-    ws = wb[feuille] if feuille and feuille in wb.sheetnames else wb[wb.sheetnames[0]]
-    lignes: list[dict] = []
-    dernier_libelle = ""
-    suite = 0
+    ws = _feuille(wb, feuille)
+    parties: list[dict] = []
+    courant: dict | None = None
     for r in range(1, ws.max_row + 1):
-        c, f = ws.cell(row=r, column=3).value, ws.cell(row=r, column=6).value
+        c = ws.cell(row=r, column=_COL_DEBUT).value
+        f = ws.cell(row=r, column=_COL_FIN).value
         if not (_est_pointille(c) or _est_pointille(f)):
             continue
         a = ws.cell(row=r, column=1).value
         libelle = " ".join(str(a).split()) if isinstance(a, str) and str(a).strip() else ""
-        if libelle:
-            dernier_libelle, suite = libelle, 0
-        else:
-            suite += 1
-            libelle = f"{dernier_libelle} (suite {suite})" if dernier_libelle else f"Ligne {r}"
-        lignes.append({"ligne": r, "libelle": libelle, "debut": "", "fin": ""})
+        if libelle:  # nouvelle partie
+            courant = {"cle": f"r{r}", "libelle": libelle, "lignes": [r]}
+            parties.append(courant)
+        elif courant is not None:  # suite de la partie précédente (même case, autre ligne)
+            courant["lignes"].append(r)
+        else:  # ligne à remplir sans libellé au tout début du tableau
+            courant = {"cle": f"r{r}", "libelle": f"Partie (ligne {r})", "lignes": [r]}
+            parties.append(courant)
     wb.close()
-    return lignes
+    return parties
+
+
+def _texte_etat(etat: str, note: str) -> str:
+    """« casse » + « vitre fissurée » -> « Cassé — vitre fissurée » (texte écrit dans l'Excel)."""
+    libelle = ETATS.get((etat or "").strip(), "")
+    note = (note or "").strip()
+    if not libelle:
+        return note  # état non choisi mais note libre : on écrit la note seule
+    return f"{libelle} — {note}" if note else libelle
+
+
+def _phase_bloc(data: dict, phase: str) -> dict:
+    """Bloc de signature d'une phase (vide si absent)."""
+    return data.get(phase) if isinstance(data.get(phase), dict) else {}
 
 
 def charger_constat(document: Path, feuille: str | None, dossier: Path) -> dict:
-    """État complet du constat : lignes (sauvegardées ou détectées), photos, signature, PDF."""
+    """État complet : parties (avec saisie début/fin), photos, et l'état des 2 signatures."""
     js = _chemin_json(dossier)
-    if js.exists():
-        data = json.loads(js.read_text(encoding="utf-8"))
-        # Filet de sécurité : si les lignes n'ont pas (encore) été enregistrées, on les
-        # redétecte depuis le modèle plutôt que d'afficher un tableau vide (perte de saisie).
-        if not data.get("lignes"):
-            data["lignes"] = lignes_depuis_modele(document, feuille)
-    else:
-        data = {"feuille": feuille, "lignes": lignes_depuis_modele(document, feuille)}
-    data["signe"] = bool(data.get("signe_le"))
-    data["photos"] = sorted(p.name for p in dossier.glob("photo-*.*"))
-    data["signature"] = (dossier / "signature.png").exists()
-    data["signataire"] = data.get("signataire", "")
-    data["fonction"] = data.get("fonction", "")
-    data["pdf"] = "constat.pdf" if (dossier / "constat.pdf").exists() else None
-    return data
+    data = json.loads(js.read_text(encoding="utf-8")) if js.exists() else {}
+    parties = data.get("parties")
+    if not parties:
+        parties = analyser_parties(document, feuille)
+    for p in parties:  # garantit la présence des sous-blocs de saisie
+        p.setdefault("debut", {"etat": "", "note": ""})
+        p.setdefault("fin", {"etat": "", "note": ""})
+    out: dict = {"feuille": feuille, "parties": parties,
+                 "photos": sorted(p.name for p in dossier.glob("photo-*.*")),
+                 "pdf": "constat.pdf" if (dossier / "constat.pdf").exists() else None}
+    for ph in PHASES:
+        s = _phase_bloc(data, ph)
+        out[ph] = {"signe": bool(s.get("signe_le")), "signataire": s.get("signataire", ""),
+                   "fonction": s.get("fonction", ""), "signe_le": s.get("signe_le", "")}
+    return out
 
 
 class ConstatSigne(Exception):
-    """Levée quand on tente de modifier les relevés d'un constat déjà signé (preuve figée)."""
+    """Levée quand on modifie une phase déjà signée (preuve figée)."""
 
 
-def enregistrer_constat(document: Path, feuille: str | None, lignes: list[dict], dossier: Path) -> None:
-    """Écrit début/fin dans le document Excel (C{r}/F{r}) et persiste l'état de saisie.
+def enregistrer_constat(document: Path, feuille: str | None, phase: str,
+                        saisies: dict, dossier: Path) -> None:
+    """Écrit l'état de chaque partie pour UNE phase dans la bonne colonne (C=début, F=fin).
 
-    Refuse toute modification après signature : l'empreinte SHA-256 du dossier de preuve doit
-    rester cohérente avec le document réellement signé (sinon la preuve s'auto-invalide)."""
+    `saisies` = { cle_partie: {"etat": "bon|sale|casse|reparer", "note": "…"} }.
+    Refuse si la phase est déjà signée (empreinte de preuve à préserver)."""
+    if phase not in PHASES:
+        raise ValueError("Phase invalide (attendu « debut » ou « fin »).")
     js = _chemin_json(dossier)
-    if js.exists():
-        deja = json.loads(js.read_text(encoding="utf-8"))
-        if deja.get("signe_le"):
-            raise ConstatSigne(
-                "Ce constat est déjà signé : les relevés ne peuvent plus être modifiés. "
-                "Faites re-signer le client si une correction est nécessaire."
-            )
+    data = json.loads(js.read_text(encoding="utf-8")) if js.exists() else {}
+    if _phase_bloc(data, phase).get("signe_le"):
+        raise ConstatSigne(
+            f"La partie « {'début' if phase == 'debut' else 'fin'} de location » est déjà signée : "
+            "elle ne peut plus être modifiée. Faites re-signer le client si une correction s'impose."
+        )
+    parties = data.get("parties") or analyser_parties(document, feuille)
+    for p in parties:
+        p.setdefault("debut", {"etat": "", "note": ""})
+        p.setdefault("fin", {"etat": "", "note": ""})
+    par_cle = {p["cle"]: p for p in parties}
+    colonne = "C" if phase == "debut" else "F"
     valeurs: dict[str, object] = {}
-    for ligne in lignes:
-        r = int(ligne.get("ligne", 0))
-        if r <= 0:
+    for cle, v in (saisies or {}).items():
+        p = par_cle.get(cle)
+        if not p:
             continue
-        debut = str(ligne.get("debut") or "").strip()
-        fin = str(ligne.get("fin") or "").strip()
-        if debut:
-            valeurs[f"C{r}"] = debut
-        if fin:
-            valeurs[f"F{r}"] = fin
+        etat = (v.get("etat") or "").strip()
+        note = (v.get("note") or "").strip()
+        p[phase] = {"etat": etat, "note": note}
+        texte = _texte_etat(etat, note)
+        if texte:
+            for r in p["lignes"]:
+                valeurs[f"{colonne}{r}"] = texte
     if valeurs:
         patch_xlsx.ecrire_cellules(document, document, feuille, valeurs)
-    js = _chemin_json(dossier)
-    ancien = json.loads(js.read_text(encoding="utf-8")) if js.exists() else {}
-    ancien.update({
-        "feuille": feuille,
-        "lignes": lignes,
-        "maj": datetime.now().isoformat(timespec="seconds"),
-    })
-    js.write_text(json.dumps(ancien, ensure_ascii=False, indent=1), encoding="utf-8")
+    data["feuille"] = feuille
+    data["parties"] = parties
+    data["maj"] = datetime.now().isoformat(timespec="seconds")
+    js.write_text(json.dumps(data, ensure_ascii=False, indent=1), encoding="utf-8")
 
 
 def ajouter_photo(dossier: Path, contenu: bytes) -> str:
@@ -138,41 +176,43 @@ def ajouter_photo(dossier: Path, contenu: bytes) -> str:
     return nom
 
 
-def _ancre_signature(document: Path, feuille: str | None) -> str | None:
-    """Cellule sous la zone « Date, Nom et Signature » côté client (colonne E des modèles)."""
+def _ancres_signature(document: Path, feuille: str | None) -> dict:
+    """Repère les DEUX zones « Date, Nom et Signature » : gauche (col A ≈ départ/début) et
+    droite (col E ≈ retour/fin). Renvoie {"debut": ref_gauche, "fin": ref_droite}."""
     wb = load_workbook(document, data_only=True)
-    ws = wb[feuille] if feuille and feuille in wb.sheetnames else wb[wb.sheetnames[0]]
-    ancre = None
+    ws = _feuille(wb, feuille)
+    reperes: list[tuple[int, int, str]] = []
     for row in ws.iter_rows(max_col=8):
-        for c in row:
-            if isinstance(c.value, str) and "Signature" in c.value and "mention" not in c.value:
-                ancre = f"{c.column_letter}{c.row + 1}"  # juste sous le libellé
+        for cell in row:
+            v = cell.value
+            if isinstance(v, str) and "Signature" in v and "mention" not in v:
+                reperes.append((cell.column, cell.row, cell.column_letter))
     wb.close()
-    return ancre
+    if not reperes:
+        return {}
+    reperes.sort()  # tri par colonne puis ligne
+    gauche, droite = reperes[0], reperes[-1]
+    return {"debut": f"{gauche[2]}{gauche[1] + 1}", "fin": f"{droite[2]}{droite[1] + 1}"}
 
 
 def enregistrer_signature(
-    dossier: Path,
-    png: bytes,
-    signataire: str,
-    document: Path | None = None,
-    fonction: str = "",
-    accord: bool = False,
+    dossier: Path, png: bytes, signataire: str, document: Path | None = None,
+    feuille: str | None = None, fonction: str = "", accord: bool = False, phase: str = "debut",
 ) -> str | None:
-    """Enregistre la signature + construit le DOSSIER DE PREUVE (exigé par la jurisprudence
-    pour donner du poids à une signature électronique simple) : identité et fonction du
-    signataire, horodatage, et empreinte SHA-256 du document Excel signé — calculée à
-    l'instant exact de la signature. Renvoie l'empreinte (None si pas de document)."""
+    """Enregistre la signature d'UNE phase + son dossier de preuve (identité, fonction, horodatage,
+    empreinte SHA-256 du document au moment de la signature). Insère l'image dans la bonne zone du
+    document (gauche pour le départ, droite pour le retour). Renvoie l'empreinte (None sans document)."""
+    if phase not in PHASES:
+        raise ValueError("Phase invalide.")
     if not png.startswith(b"\x89PNG\r\n\x1a\n"):
         raise ValueError("Signature invalide.")
-    (dossier / "signature.png").write_bytes(png)
+    (dossier / f"signature-{phase}.png").write_bytes(png)
     empreinte: str | None = None
-    # Insère aussi la signature DANS le document Excel (zone « Date, Nom et Signature »).
     if document is not None and document.exists():
         try:
-            ancre = _ancre_signature(document, None)
+            ancre = _ancres_signature(document, feuille).get(phase)
             if ancre:
-                patch_xlsx.inserer_image(document, None, ancre, png)
+                patch_xlsx.inserer_image(document, feuille, ancre, png, cle=phase)
         except Exception:  # noqa: BLE001 — l'insertion Excel ne doit pas bloquer la signature
             pass
         try:
@@ -181,20 +221,23 @@ def enregistrer_signature(
             empreinte = None
     js = _chemin_json(dossier)
     data = json.loads(js.read_text(encoding="utf-8")) if js.exists() else {}
-    maintenant = datetime.now()
-    data["signataire"] = (signataire or "").strip()
-    data["fonction"] = (fonction or "").strip()
-    data["accord"] = bool(accord)
-    data["signe_le"] = maintenant.strftime("%d/%m/%Y à %H:%M")
-    data["signe_le_iso"] = maintenant.isoformat(timespec="seconds")
+    now = datetime.now()
+    bloc = {
+        "signataire": (signataire or "").strip(),
+        "fonction": (fonction or "").strip(),
+        "accord": bool(accord),
+        "signe_le": now.strftime("%d/%m/%Y à %H:%M"),
+        "signe_le_iso": now.isoformat(timespec="seconds"),
+    }
     if empreinte:
-        data["empreinte_sha256"] = empreinte
+        bloc["empreinte_sha256"] = empreinte
+    data[phase] = bloc
     js.write_text(json.dumps(data, ensure_ascii=False, indent=1), encoding="utf-8")
     return empreinte
 
 
 def generer_pdf(dossier: Path, titre: str, sous_titre: str, societe: str = "") -> Path:
-    """PDF de constat : en-tête, relevés début/fin, photos, signature datée."""
+    """PDF de constat : relevés par partie (état début / état fin), photos, et les 2 signatures."""
     from reportlab.lib import colors
     from reportlab.lib.pagesizes import A4
     from reportlab.lib.units import mm
@@ -202,7 +245,7 @@ def generer_pdf(dossier: Path, titre: str, sous_titre: str, societe: str = "") -
     from reportlab.pdfgen import canvas as rl_canvas
 
     js = _chemin_json(dossier)
-    data = json.loads(js.read_text(encoding="utf-8")) if js.exists() else {"lignes": []}
+    data = json.loads(js.read_text(encoding="utf-8")) if js.exists() else {"parties": []}
     cible = dossier / "constat.pdf"
     c = rl_canvas.Canvas(str(cible), pagesize=A4)
     largeur, hauteur = A4
@@ -221,46 +264,44 @@ def generer_pdf(dossier: Path, titre: str, sous_titre: str, societe: str = "") -
         return hauteur - marge - 46
 
     y = entete_page()
-    # --- Relevés ---
     c.setFont("Helvetica-Bold", 9)
-    c.drawString(marge, y, "Élément")
+    c.drawString(marge, y, "Partie du module")
     c.drawString(marge + 78 * mm, y, "Début de location")
     c.drawString(marge + 128 * mm, y, "Fin de location")
     y -= 12
     c.setFont("Helvetica", 9)
-    for ligne in data.get("lignes", []):
+    for p in data.get("parties", []):
         if y < 30 * mm:
             c.showPage()
             y = entete_page()
             c.setFont("Helvetica", 9)
-        c.drawString(marge, y, str(ligne.get("libelle", ""))[:52])
-        c.drawString(marge + 78 * mm, y, str(ligne.get("debut", ""))[:34])
-        c.drawString(marge + 128 * mm, y, str(ligne.get("fin", ""))[:34])
+        deb = _texte_etat((p.get("debut") or {}).get("etat", ""), (p.get("debut") or {}).get("note", ""))
+        fin = _texte_etat((p.get("fin") or {}).get("etat", ""), (p.get("fin") or {}).get("note", ""))
+        c.drawString(marge, y, str(p.get("libelle", ""))[:52])
+        c.drawString(marge + 78 * mm, y, deb[:34])
+        c.drawString(marge + 128 * mm, y, fin[:34])
         y -= 11
 
-    # --- Photos ---
     photos = sorted(dossier.glob("photo-*.*"))
     if photos:
         c.showPage()
         y = entete_page()
         c.setFont("Helvetica-Bold", 11)
         c.drawString(marge, y, f"Photos ({len(photos)})")
-        y -= 8
         larg_img = (largeur - 2 * marge - 8 * mm) / 2
         haut_img = 62 * mm
         x = marge
         col = 0
-        y -= haut_img
+        y -= 8 + haut_img
         for p in photos:
             try:
-                img = ImageReader(str(p))
-                c.drawImage(img, x, y, width=larg_img, height=haut_img,
+                c.drawImage(ImageReader(str(p)), x, y, width=larg_img, height=haut_img,
                             preserveAspectRatio=True, anchor="sw")
                 c.setFont("Helvetica", 7)
                 c.setFillColor(colors.grey)
                 c.drawString(x, y - 8, p.name)
                 c.setFillColor(colors.black)
-            except Exception:  # noqa: BLE001 — une photo illisible ne bloque pas le constat
+            except Exception:  # noqa: BLE001
                 continue
             col += 1
             if col % 2 == 0:
@@ -272,32 +313,40 @@ def generer_pdf(dossier: Path, titre: str, sous_titre: str, societe: str = "") -
             else:
                 x = marge + larg_img + 8 * mm
 
-    # --- Signature ---
-    sig = dossier / "signature.png"
-    if sig.exists():
-        if y < 70 * mm:
-            c.showPage()
-            y = entete_page()
-        c.setFont("Helvetica-Bold", 10)
-        mention = "« bon pour accord »" if data.get("accord") else "signature recueillie"
-        c.drawString(marge, 58 * mm, f"Signature du client — {mention}")
-        c.setFont("Helvetica", 9)
-        qui = data.get("signataire") or ""
-        fonction = data.get("fonction") or ""
-        quand = data.get("signe_le") or ""
-        identite = f"{qui} ({fonction})" if fonction else qui
-        c.drawString(marge, 52 * mm, f"{identite}   ·   signé le {quand}")
-        try:
-            c.drawImage(ImageReader(str(sig)), marge, 20 * mm, width=70 * mm, height=28 * mm,
-                        preserveAspectRatio=True, anchor="sw", mask="auto")
-        except Exception:  # noqa: BLE001
-            pass
-        # Élément de preuve : empreinte du document Excel au moment exact de la signature.
-        if data.get("empreinte_sha256"):
-            c.setFont("Helvetica", 6.5)
-            c.setFillColor(colors.grey)
-            c.drawString(marge, 14 * mm,
-                         f"Empreinte SHA-256 du document signé : {data['empreinte_sha256']}")
-            c.setFillColor(colors.black)
+    # --- Les deux signatures (départ à gauche, retour à droite) ---
+    signatures = [("debut", "Début de location (départ)", marge),
+                  ("fin", "Fin de location (retour)", marge + (largeur - 2 * marge) / 2)]
+    if any(_phase_bloc(data, ph).get("signe_le") for ph, _, _ in signatures):
+        c.showPage()
+        y = entete_page()
+        c.setFont("Helvetica-Bold", 12)
+        c.drawString(marge, y, "Signatures du client")
+        for phase, lbl, x0 in signatures:
+            b = _phase_bloc(data, phase)
+            c.setFont("Helvetica-Bold", 10)
+            c.drawString(x0, y - 22, lbl)
+            c.setFont("Helvetica", 9)
+            if b.get("signe_le"):
+                qui = b.get("signataire") or ""
+                fct = b.get("fonction") or ""
+                c.drawString(x0, y - 36, (f"{qui} ({fct})" if fct else qui)[:44])
+                mention = "« bon pour accord »" if b.get("accord") else "signature recueillie"
+                c.drawString(x0, y - 48, f"{mention} · {b.get('signe_le', '')}")
+                sig = dossier / f"signature-{phase}.png"
+                if sig.exists():
+                    try:
+                        c.drawImage(ImageReader(str(sig)), x0, y - 110, width=64 * mm, height=26 * mm,
+                                    preserveAspectRatio=True, anchor="sw", mask="auto")
+                    except Exception:  # noqa: BLE001
+                        pass
+                if b.get("empreinte_sha256"):
+                    c.setFont("Helvetica", 5.5)
+                    c.setFillColor(colors.grey)
+                    c.drawString(x0, y - 118, f"SHA-256 : {b['empreinte_sha256'][:48]}…")
+                    c.setFillColor(colors.black)
+            else:
+                c.setFillColor(colors.grey)
+                c.drawString(x0, y - 36, "— non signé —")
+                c.setFillColor(colors.black)
     c.save()
     return cible

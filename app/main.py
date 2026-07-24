@@ -978,12 +978,16 @@ def constat_lire(job_id: str, nom: str) -> dict:
 
 @app.post("/terrain/{job_id}/{nom}")
 async def constat_enregistrer(job_id: str, nom: str, corps: dict) -> dict:
+    """Enregistre l'état des parties pour UNE phase (« debut » = départ / « fin » = retour)."""
     document, dossier = _contexte_constat(job_id, nom)
-    lignes = corps.get("lignes") or []
+    phase = (corps.get("phase") or "debut").strip()
+    saisies = corps.get("saisies") or {}
     try:
-        terrain.enregistrer_constat(document, None, lignes, dossier)
+        terrain.enregistrer_constat(document, None, phase, saisies, dossier)
     except terrain.ConstatSigne as exc:
         raise HTTPException(status_code=409, detail=str(exc)) from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
     except Exception as exc:  # noqa: BLE001
         raise HTTPException(status_code=422, detail=f"Enregistrement impossible : {exc}") from exc
     return terrain.charger_constat(document, None, dossier)
@@ -1014,25 +1018,29 @@ async def constat_signature(job_id: str, nom: str, corps: dict, request: Request
     signataire = (corps.get("signataire") or "").strip()
     fonction = (corps.get("fonction") or "").strip()
     accord = bool(corps.get("accord"))
+    phase = (corps.get("phase") or "debut").strip()
     try:
         png = base64.b64decode(image[len(prefixe):])
         empreinte = terrain.enregistrer_signature(
-            dossier, png, signataire, document=document, fonction=fonction, accord=accord
+            dossier, png, signataire, document=document, fonction=fonction, accord=accord, phase=phase,
         )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
     except Exception as exc:  # noqa: BLE001
         raise HTTPException(status_code=400, detail=f"Signature illisible : {exc}") from exc
     # Dossier de preuve : l'événement est journalisé en base (horodaté), avec l'empreinte
     # du document signé, l'agent présent et l'IP — opposable en cas de contestation.
+    phase_lbl = "début de location" if phase == "debut" else "fin de location"
     infos = db.infos_job(job_id)
     db.journaliser(
         "signature",
-        f"Constat signé : {nom} — signataire « {signataire} »"
+        f"Constat signé ({phase_lbl}) : {nom} — signataire « {signataire} »"
         + (f" ({fonction})" if fonction else "")
         + f", agent {utilisateur_courant(request)}, IP {securite.ip_client(request)}"
         + (f", SHA-256 {empreinte}" if empreinte else ""),
         client_id=infos.get("client_id"),
     )
-    logger.info("AUDIT constat signé : %s (%s) par %s", nom, job_id, utilisateur_courant(request))
+    logger.info("AUDIT constat signé (%s) : %s (%s) par %s", phase, nom, job_id, utilisateur_courant(request))
     return terrain.charger_constat(document, None, dossier)
 
 

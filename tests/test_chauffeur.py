@@ -71,7 +71,7 @@ def test_inserer_image_ajoute_la_signature(tmp_path):
         assert avant <= apres  # rien de perdu (logo, perspectives, feuilles)
         dessin = next(n for n in apres if n.startswith("xl/drawings/") and n.endswith(".xml"))
         xml = z.read(dessin).decode("utf-8")
-        assert xml.count("oneCellAnchor") >= 1 and "Signature client" in xml
+        assert xml.count("oneCellAnchor") >= 1 and "Signature gb" in xml
 
 
 def test_re_signature_ne_duplique_pas(tmp_path):
@@ -81,11 +81,13 @@ def test_re_signature_ne_duplique_pas(tmp_path):
     assert patch_xlsx.inserer_image(doc, None, "E48", PNG) is True
     with zipfile.ZipFile(doc) as z:
         dessin = next(n for n in z.namelist() if n.startswith("xl/drawings/") and n.endswith(".xml"))
-        assert z.read(dessin).decode("utf-8").count("Signature client") == 1
+        assert z.read(dessin).decode("utf-8").count("Signature gb") == 1
 
 
-def test_ancre_signature_detectee():
-    assert terrain._ancre_signature(MODELE, None) == "E48"
+def test_ancres_signature_gauche_et_droite():
+    ancres = terrain._ancres_signature(MODELE, None)
+    assert ancres["fin"] == "E48"   # droite = fin de location
+    assert ancres["debut"] == "A48"  # gauche = début de location
 
 
 def test_enregistrer_signature_embarque_dans_le_document(tmp_path):
@@ -93,10 +95,10 @@ def test_enregistrer_signature_embarque_dans_le_document(tmp_path):
     shutil.copy(MODELE, doc)
     dossier = tmp_path / "constat"
     dossier.mkdir()
-    terrain.enregistrer_signature(dossier, PNG, "M. Client", document=doc)
-    assert (dossier / "signature.png").exists()
+    terrain.enregistrer_signature(dossier, PNG, "M. Client", document=doc, phase="debut")
+    assert (dossier / "signature-debut.png").exists()
     with zipfile.ZipFile(doc) as z:
-        assert "xl/media/signature_gb.png" in z.namelist()
+        assert "xl/media/signature_debut.png" in z.namelist()
 
 
 # ------------------------------------------------------------------ accès mobile

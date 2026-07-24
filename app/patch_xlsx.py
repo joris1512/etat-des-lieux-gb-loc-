@@ -138,13 +138,15 @@ _EMU_PAR_POUCE = 914400
 
 def inserer_image(
     xlsx: Path, feuille: str | None, cellule: str, png: bytes,
-    largeur_po: float = 2.2, hauteur_po: float = 0.85,
+    largeur_po: float = 2.2, hauteur_po: float = 0.85, cle: str = "gb",
 ) -> bool:
     """Insère un PNG (ex. signature) ancré sur `cellule`, en préservant tout le classeur.
 
     S'appuie sur le drawing DÉJÀ présent sur la feuille (tous nos modèles en ont un : logo,
-    perspectives). Re-signature : remplace l'image existante au lieu d'en empiler une nouvelle.
-    Renvoie False si la feuille n'a pas de drawing (image non insérée, sans erreur).
+    perspectives). `cle` distingue plusieurs images indépendantes (ex. « debut » / « fin » pour
+    les deux signatures) : chacune a son propre fichier média, donc elles coexistent. Re-signer
+    la MÊME clé remplace son image sans en empiler une nouvelle. Renvoie False si la feuille
+    n'a pas de drawing (image non insérée, sans erreur).
     """
     with zipfile.ZipFile(xlsx) as zin:
         items = {n: zin.read(n) for n in zin.namelist()}
@@ -169,8 +171,9 @@ def inserer_image(
     nom_drawing = chemin_drawing.rsplit("/", 1)[1]
     chemin_rels_drawing = f"xl/drawings/_rels/{nom_drawing}.rels"
 
-    # 1) L'image dans le paquet (remplacée si déjà présente = re-signature).
-    chemin_media = "xl/media/signature_gb.png"
+    # 1) L'image dans le paquet (une par `cle` ; remplacée si déjà présente = re-signature).
+    cle_sure = re.sub(r"[^a-z0-9]", "", cle.lower()) or "gb"
+    chemin_media = f"xl/media/signature_{cle_sure}.png"
     deja = chemin_media in items
     items[chemin_media] = png
 
@@ -194,7 +197,7 @@ def inserer_image(
         rid_img = f"rId{max((int(i) for i in ids), default=0) + 1}"
         rels = rels.replace(
             "</Relationships>",
-            f'<Relationship Id="{rid_img}" Type="{_REL_NS}/image" Target="../media/signature_gb.png"/></Relationships>',
+            f'<Relationship Id="{rid_img}" Type="{_REL_NS}/image" Target="../media/signature_{cle_sure}.png"/></Relationships>',
         )
         items[chemin_rels_drawing] = rels.encode("utf-8")
 
@@ -208,7 +211,7 @@ def inserer_image(
             f'<xdr:oneCellAnchor><xdr:from><xdr:col>{col}</xdr:col><xdr:colOff>0</xdr:colOff>'
             f'<xdr:row>{row}</xdr:row><xdr:rowOff>0</xdr:rowOff></xdr:from>'
             f'<xdr:ext cx="{cx}" cy="{cy}"/>'
-            f'<xdr:pic><xdr:nvPicPr><xdr:cNvPr id="{id_forme}" name="Signature client"/>'
+            f'<xdr:pic><xdr:nvPicPr><xdr:cNvPr id="{id_forme}" name="Signature {cle_sure}"/>'
             f'<xdr:cNvPicPr/></xdr:nvPicPr><xdr:blipFill>'
             f'<a:blip xmlns:r="{_REL_NS}" r:embed="{rid_img}"/><a:stretch><a:fillRect/></a:stretch>'
             f'</xdr:blipFill><xdr:spPr><a:xfrm><a:off x="0" y="0"/><a:ext cx="{cx}" cy="{cy}"/></a:xfrm>'
