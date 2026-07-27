@@ -1023,8 +1023,8 @@
         :'<div class="empty" style="padding:12px"><p>Aucun document. Scannez ou joignez un PDF, une photo, un Excel…</p></div>';
       return `<div class="card"><div class="card-h"><span class="ic">${I.file}</span> Documents du chantier · ${docs.length}</div>
         <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-bottom:12px">
-          <input type="file" id="doc-upload" data-chantier="${ch.id}" accept="image/*,application/pdf,.xlsx,.xls,.docx,.doc" capture="environment" multiple style="max-width:320px">
-          <span class="hint">Scannez ou joignez un document (PDF, photo, Excel, Word) — 20 Mo max.</span>
+          <input type="file" id="doc-upload" data-chantier="${ch.id}" accept="image/*,application/pdf,.xlsx,.xls,.docx,.doc" multiple style="max-width:320px">
+          <span class="hint">Sur téléphone : appareil photo, <b>scanner de documents</b> (PDF net et recadré) ou fichier existant. PDF, photo, Excel, Word — 20 Mo max.</span>
         </div>
         <div id="doc-liste">${liste}</div></div>`;
     }
