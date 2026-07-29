@@ -262,9 +262,37 @@ def _style_wrap(styles_xml: str, base_index: int, cache: dict[int, int]) -> tupl
     return styles_xml, nouvel_index
 
 
-def _hauteur_ligne(xml: str, row: int, nb_lignes: int) -> str:
-    """Fixe une hauteur de ligne suffisante pour afficher `nb_lignes` (cases fusionnées incluses)."""
-    hauteur = round(nb_lignes * 15.0, 1)
+_LIGNE_PT = 15.0        # hauteur approx d'une ligne de texte (Excel, police ~11)
+_DEFAUT_ROW_PT = 15.0   # hauteur par défaut d'une ligne sans hauteur explicite
+
+
+def _fusion_lignes(xml: str, cellule: str) -> tuple[int, int]:
+    """(première, dernière) ligne de la cellule FUSIONNÉE contenant `cellule` ; sinon (r, r).
+
+    La zone mobilier est souvent fusionnée sur plusieurs lignes (ex. A46:B47) : sa hauteur
+    disponible est la SOMME des lignes fusionnées, pas la seule ligne du haut."""
+    r, col = _row_num(cellule), _col_index(cellule)
+    for m in re.finditer(r'<mergeCell ref="([A-Z]+\d+):([A-Z]+\d+)"', xml):
+        r1, r2 = _row_num(m.group(1)), _row_num(m.group(2))
+        c1, c2 = _col_index(m.group(1)), _col_index(m.group(2))
+        if r1 <= r <= r2 and c1 <= col <= c2:
+            return r1, r2
+    return r, r
+
+
+def _hauteur_row(xml: str, row: int) -> float:
+    """Hauteur actuelle de la ligne (pt) — explicite si présente, sinon défaut."""
+    m = re.search(rf'<row r="{row}"([^>]*)>', xml)
+    if m:
+        h = re.search(r'\sht="([\d.]+)"', m.group(1))
+        if h:
+            return float(h.group(1))
+    return _DEFAUT_ROW_PT
+
+
+def _fixer_hauteur(xml: str, row: int, hauteur: float) -> str:
+    """Porte la hauteur de `row` à `hauteur` pt (jamais en dessous de l'existant)."""
+    hauteur = round(max(hauteur, _hauteur_row(xml, row)), 1)
     m = re.search(rf'<row r="{row}"([^>]*?)>', xml)
     if not m:
         return xml
@@ -285,7 +313,7 @@ def ecrire_cellules(
     xml = items[cible].decode("utf-8")
     styles_xml = items.get("xl/styles.xml", b"").decode("utf-8")
     cache_wrap: dict[int, int] = {}
-    hauteurs: dict[int, int] = {}
+    besoins: dict[tuple[int, int], int] = {}  # (1re, dernière) ligne de zone -> nb de lignes max
 
     for ref, valeur in valeurs.items():
         if valeur is None or valeur == "":
@@ -294,13 +322,19 @@ def ecrire_cellules(
             base = _style_index_actuel(xml, ref)
             styles_xml, idx = _style_wrap(styles_xml, base, cache_wrap)
             xml = _ecrire_une(xml, ref, valeur, style_force=f' s="{idx}"')
-            r = _row_num(ref)
-            hauteurs[r] = max(hauteurs.get(r, 0), valeur.count("\n") + 1)
+            zone = _fusion_lignes(xml, ref)
+            besoins[zone] = max(besoins.get(zone, 0), valeur.count("\n") + 1)
         else:
             xml = _ecrire_une(xml, ref, valeur)
 
-    for row, nb in hauteurs.items():
-        xml = _hauteur_ligne(xml, row, nb)
+    # On N'AGRANDIT QUE si le texte dépasse la hauteur DÉJÀ disponible de la zone (lignes
+    # fusionnées comprises), et seulement du déficit, ajouté à la DERNIÈRE ligne de la zone.
+    # Ainsi le contenu en dessous (matériel à assurer, signatures) n'est pas poussé inutilement.
+    for (r1, r2), nb in besoins.items():
+        besoin = nb * _LIGNE_PT
+        existant = sum(_hauteur_row(xml, rr) for rr in range(r1, r2 + 1))
+        if besoin > existant:
+            xml = _fixer_hauteur(xml, r2, _hauteur_row(xml, r2) + (besoin - existant))
 
     items[cible] = xml.encode("utf-8")
     if styles_xml:

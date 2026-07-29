@@ -92,11 +92,14 @@ def test_aucun_avertissement_mobilier_sur_eiffage():
     assert not any("rattach" in a.lower() for a in rapport.avertissements)
 
 
-def test_mobilier_abondant_renvoie_a_la_ligne(tmp_path):
-    """Beaucoup de mobilier dans une cellule = renvoi à la ligne + case agrandie (pas « à la suite »).
+def _hauteur_zone_mobilier(ws):
+    """Hauteur totale de la zone mobilier fusionnée A46:B47 (pt)."""
+    return (ws.row_dimensions[46].height or 15) + (ws.row_dimensions[47].height or 15)
 
-    Sans wrapText, Excel affiche les lignes en continu : on vérifie que le style porte bien le
-    renvoi à la ligne et que la hauteur de ligne est augmentée, sans casser le classeur."""
+
+def test_mobilier_abondant_renvoie_a_la_ligne(tmp_path):
+    """Beaucoup de mobilier = renvoi à la ligne + ZONE agrandie (pas « à la suite »), sans casser
+    le classeur. La case A46 est fusionnée A46:B47 : on vérifie la hauteur TOTALE de la zone."""
     import re
     import zipfile
 
@@ -111,12 +114,29 @@ def test_mobilier_abondant_renvoie_a_la_ligne(tmp_path):
     ws = wb["Bungalow avec mobiliers"]
     assert ws["A46"].alignment.wrap_text is True          # renvoi à la ligne activé
     assert str(ws["A46"].value).count("\n") == 11          # 12 lignes conservées
-    assert ws.row_dimensions[46].height and ws.row_dimensions[46].height >= 12 * 15  # case agrandie
+    assert _hauteur_zone_mobilier(ws) >= 12 * 15           # la ZONE fusionnée est assez haute
 
     # Intégrité : le logo / les dessins du modèle restent présents.
     with zipfile.ZipFile(out) as z:
         assert any(re.search(r"drawing\d*\.xml$", n) for n in z.namelist())
         assert any(n.startswith("xl/media/") for n in z.namelist())
+
+
+def test_mobilier_court_ne_pousse_pas_le_contenu_du_dessous(tmp_path):
+    """Peu de mobilier (tient dans la zone déjà prévue) : la hauteur n'est PAS augmentée →
+    la section « matériel à assurer » et les signatures en dessous ne bougent pas."""
+    from app import patch_xlsx
+
+    src = Path(__file__).parent.parent / "templates" / "bungalow_mobilier.xlsx"
+    ref = load_workbook(src)["Bungalow avec mobiliers"]
+    zone_avant = (ref.row_dimensions[46].height or 15) + (ref.row_dimensions[47].height or 15)
+
+    out = tmp_path / "mobilier.xlsx"
+    patch_xlsx.ecrire_cellules(src, out, "Bungalow avec mobiliers",
+                               {"A46": "Armoires doubles : 10\nBancs : 2"})  # 2 lignes
+    ws = load_workbook(out)["Bungalow avec mobiliers"]
+    assert ws["A46"].alignment.wrap_text is True
+    assert _hauteur_zone_mobilier(ws) == zone_avant  # zone INCHANGÉE : rien poussé en dessous
 
 
 def test_kit_reste_choisi_quand_kitchenette_seule():
