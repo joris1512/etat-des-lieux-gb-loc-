@@ -48,7 +48,10 @@ if getattr(sys, "frozen", False):
     ANCIEN_DONNEES_DIR = Path(os.environ.get("LOCALAPPDATA") or str(RACINE)) / "GB Etats des lieux - donnees"
 else:
     RACINE = Path(__file__).resolve().parents[1]
-    DONNEES_DIR = RACINE
+    # Mode source (non figé) : par défaut les données vivent dans le dépôt. Mais si l'app est
+    # LANCÉE DEPUIS LES SOURCES sur un poste (contournement antivirus : pas d'exe à compiler),
+    # `GB_DONNEES_DIR` permet de pointer vers le dossier PARTAGÉ du serveur (mêmes comptes/clients).
+    DONNEES_DIR = Path(os.environ["GB_DONNEES_DIR"]) if os.environ.get("GB_DONNEES_DIR") else RACINE
 
 # La base est-elle sur un partage réseau ? (→ mode journal SQLite compatible SMB dans db.py)
 DONNEES_RESEAU = _est_reseau(DONNEES_DIR)
