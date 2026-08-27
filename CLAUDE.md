@@ -13,6 +13,20 @@
 > (WIP sur `main` par-dessus `7daf58f`) — le commiter quand la direction a validé. Health-check
 > de reprise fait le 26/08 : pytest 179 OK, ruff clean, app démarre.
 
+> **🛠️ Session 2026-08-27 (commits sur `main`, 179 tests verts à chaque étape) :** `e5a4e9b`
+> WIP v2.7.2 enfin commité ; `2ed49cf` `requirements.lock` ; `a862a2c` sauvegardes fiabilisées
+> (base **+ documents**, 30 j, **copie OneDrive** via `%OneDrive%` ou `GB_SAUVEGARDE_EXTERNE`) ;
+> `34024a0` messages d'erreur clairs (`main._erreur_lisible`) ; `4ac65ce` R1 douches (onglet 4D/6D
+> seulement si modèle `douches.xlsx`) + IA `temperature=0` / `max_tokens` 16000 / refus si tronqué ;
+> `e21a012` **vrais modèles 2WC branchés** (`sanitaire_2wc_2d_2u`=GRAND SANITAIRE MIXTE,
+> `sanitaire_2wc_pmr`=BLOC 2WCH, onglet « 2WCH ») + **clim marquée TOUJOURS** (présente→OUI seul,
+> sinon→NON seul, jamais les deux). Sauvegarde code hors-ligne = `..\SAUVEGARDE-CODE GB (...).bundle`.
+> **Reste** (nécessite Joris) : dépôt git distant (offsite auto), droits d'accès dossier données,
+> choix hébergement. **NON fait volontairement** (risque sans validation live) : `est_prestation`
+> mots-entiers ; UI clim/assemblage (abandonné, Joris n'en veut pas). Multi-poste : `python-portable\`
+> + `Lancer GB (tous postes).vbs` créés mais **pywebview n'affiche pas** en embeddable → raccourci
+> resté sur le lanceur venv d'origine (fenêtre OK sur CE PC).
+
 ## But
 Outil interne pour **GB Location** (loueur de modulaires préfabriqués). À partir d'un **devis PDF**,
 l'app reconnaît chaque module, choisit le bon **modèle Excel**, applique la **logique d'assemblage**,
