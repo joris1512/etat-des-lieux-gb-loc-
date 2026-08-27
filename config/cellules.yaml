@@ -135,12 +135,15 @@ modeles:
     entete_format: {client: "CLIENT : {valeur}", titre_chantier: "CHANTIER : {valeur}"}
     fonctions_cellules: {REFECTOIRE: B8, BUREAU: D8, SALLE DE REUNION: E8, VESTIAIRE: G8}
     mobilier: {}
+    # R6 : le 8m² n'a pas de ligne mobilier dédiée -> le mobilier va dans « DIVERS » (case C46).
+    mobilier_zone: [C46]
   bungalow_8m2_sanitaire.xlsx:
     feuille: "Bungalow 8M² coin Sanitaire"
     entete: {client: E5, titre_chantier: E7}
     entete_format: {client: "CLIENT : {valeur}", titre_chantier: "CHANTIER : {valeur}"}
     fonctions_cellules: {REFECTOIRE: B9, BUREAU: D9, SALLE DE REUNION: E9, VESTIAIRE: G9}
     mobilier: {}
+    mobilier_zone: [C46]
   bungalow_20m2_vide.xlsx:
     feuille: "Bungalow vide"
     entete: {client: E5, titre_chantier: E6}
@@ -164,8 +167,14 @@ modeles:
     entete_format: {client: "CLIENT : {valeur}", titre_chantier: "CHANTIER : {valeur}"}
     fonctions_cellules: {REFECTOIRE: D8}
     mobilier: {}
-    # Section MOBILIERS du réfectoire : liste complète du devis sur A49-A50.
+    # Section MOBILIERS du réfectoire : liste (hors kitchenette) sur A49-A50.
     mobilier_zone: [A49, A50]
+    # Kitchenette : quantités du DEVIS (0 si absent), pas la valeur « 1 » imprimée d'office.
+    kitchenette:
+      - {cellule: A52, label: "Evier", motif: "EVIER"}
+      - {cellule: A53, label: "Chauffe-eau", motif: "CHAUFFE EAU"}
+      - {cellule: A54, label: "Micro-ondes", motif: "MICRO ONDES"}
+      - {cellule: A55, label: "Frigo", motif: "REFRIGERATEUR"}
   bungalow_petite_enfance.xlsx:
     feuille: "Bungalow vide"
     entete: {client: E5, titre_chantier: E6}
@@ -246,6 +255,10 @@ modeles:
     entete: {client: E5, titre_chantier: E7}
     entete_format: {client: "CLIENT : {valeur}", titre_chantier: "CHANTIER : {valeur}"}
     mobilier: {}
+    # R2 : emplacements des WC (« V : … »). On garde `nb_modules` (1..3), on efface le reste.
+    wc_emplacements: [A7, A8, A9]
+    # Agrandir les lignes doses (36) et mise en eau (37) pour qu'elles ne soient pas coupées à l'impression.
+    hauteur_lignes: [36, 37]
   sanitaire_grand_mixte.xlsx:
     feuille: "Grand Sanitaire Mixte"
     entete: {client: E5, titre_chantier: E7}
@@ -271,3 +284,10 @@ modeles:
     entete: {client: D5, titre_chantier: D7}
     entete_format: {client: "CLIENT : {valeur}", titre_chantier: "CHANTIER : {valeur}"}
     mobilier: {}
+  cuve.xlsx:
+    feuille: "Feuil1"
+    entete: {client: A6, titre_chantier: A7}
+    entete_format: {client: "CLIENT : {valeur}", titre_chantier: "CHANTIER : {valeur}"}
+    mobilier: {}
+    # Cuve : taille (3m/6m -> « CUVE N M3 » en A13) + RACCORDS = 1 si branchement au devis (A24).
+    cuve: {taille_cellule: A13, raccords_cellule: A24}

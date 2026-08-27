@@ -1,14 +1,18 @@
 """Application de la logique d'assemblage : devis extrait -> liste d'états des lieux à produire.
 
-Règle (la seule vraie logique) :
-- N lignes BUNGALOW consécutives appartenant au MÊME bloc fonctionnel = un assemblage de N modules.
-  -> on génère 1 état « assemblé » (qui regroupe les N) + N états « bungalow 15m2 » individuels.
+Règles :
+- N bungalows consécutifs du MÊME bloc AVEC une ligne d'assemblage explicite (`ArticleDevis.assemble`
+  = True, posé quand le devis porte « ASSEMBLAGE DES BUNGALOWS » / « ASSEMBLAGE/DESASSEMBLAGE ») =
+  un assemblage -> 1 état « assemblé » (qui regroupe les N) + N états individuels.
+- N bungalows consécutifs du même bloc SANS ligne d'assemblage = N états INDIVIDUELS distincts
+  (deux bungalows qui se suivent ne sont PAS assemblés automatiquement).
 - 1 seule ligne BUNGALOW = 1 état individuel classique.
 - Un sanitaire / module spécial (est_bungalow=False) = 1 état individuel avec son propre modèle.
 
-Le mobilier va TOUJOURS sur les états INDIVIDUELS (chaque module garde le mobilier de SA ligne
-de devis) — jamais sur l'état assemblé, qui ne sert qu'à l'inspection de l'ensemble. Le mobilier
-mis en commun du bloc ne sert qu'à CHOISIR la variante du modèle assemblé (kit kitchenette ou non).
+Le mobilier commun d'un groupe de bungalows identiques est RÉPARTI À PARTS ÉGALES entre les N
+modules (ex. 12 armoires sur 2 bungalows -> 6 + 6). Il va toujours sur les états INDIVIDUELS,
+jamais sur l'état assemblé (qui ne sert qu'à l'inspection de l'ensemble). La présence
+d'équipement kitchenette dans ce mobilier commun sert à choisir la variante du modèle assemblé.
 """
 
 from __future__ import annotations
@@ -96,6 +100,17 @@ def _variante_bungalow(art: ArticleDevis) -> str | None:
     return v("vide")
 
 
+def _est_wc_autonome(modele: str) -> bool:
+    """True si le modèle est un WC autonome — regroupé par paquets de 3 par état des lieux (R2)."""
+    return "WC AUTONOME" in normaliser(modele or "")
+
+
+def _nb_douches(texte: str) -> int | None:
+    """Nombre de douches lu sur la ligne (« W4D », « 4 DOUCHES ») pour choisir l'onglet 4D/6D (R1)."""
+    m = re.search(r"(\d+)\s*D(?:OUCHE)?S?\b", normaliser(texte or ""))
+    return int(m.group(1)) if m else None
+
+
 def _est_bungalow_modele(modele: str, defaut: bool) -> bool:
     """Devine si un modèle choisi est un bungalow (pour la logique d'assemblage)."""
     m = (modele or "").lower()
@@ -140,6 +155,25 @@ def _fusionner_mobilier(articles: list[ArticleDevis]) -> list[MobilierItem]:
     return [MobilierItem(designation=d, quantite=q) for d, q in cumul.items()]
 
 
+def _repartir(mobilier: list[MobilierItem], n: int) -> list[list[MobilierItem]]:
+    """Répartit chaque ligne de mobilier à parts ÉGALES entre n modules (règle R10).
+
+    Ex. 12 armoires sur 2 bungalows -> 6 + 6 ; 4 tables sur 2 -> 2 + 2 ; 16 chaises sur 2 -> 8 + 8.
+    Un reste éventuel (quantité non divisible par n) est attribué aux PREMIERS modules
+    (ex. 13 sur 2 -> 7 + 6). Pour n == 1, le module reçoit tout le mobilier.
+    """
+    if n <= 0:
+        return []
+    parts: list[list[MobilierItem]] = [[] for _ in range(n)]
+    for item in mobilier:
+        base, reste = divmod(item.quantite, n)
+        for i in range(n):
+            q = base + (1 if i < reste else 0)
+            if q > 0:
+                parts[i].append(MobilierItem(designation=item.designation, quantite=q))
+    return parts
+
+
 def construire_plan(extraction: ExtractionDevis) -> PlanGeneration:
     """Transforme l'extraction du devis en plan d'états des lieux à produire."""
     plan = PlanGeneration(entete=extraction.entete)
@@ -178,6 +212,8 @@ def construire_plan(extraction: ExtractionDevis) -> PlanGeneration:
     # Regroupement en "runs" de bungalows consécutifs du même bloc.
     run: list[tuple[ArticleDevis, str]] = []  # (article, modele) du bungalow standard
     run_bloc: str | None = None
+    wc_run: list[ArticleDevis] = []  # WC autonomes consécutifs, à regrouper par 3 (R2)
+    wc_modele: str | None = None
 
     def cloturer_run() -> None:
         nonlocal run, run_bloc
@@ -186,13 +222,33 @@ def construire_plan(extraction: ExtractionDevis) -> PlanGeneration:
         articles = [a for a, _ in run]
         bloc = run_bloc
         fonction = detecter_fonction(bloc)
-        mobilier = _fusionner_mobilier(articles)
+        pooled = _fusionner_mobilier(articles)
         n = len(articles)
-        if n >= 2:
+        parts = _repartir(pooled, n)  # mobilier commun réparti à parts égales (R10)
+        # Modèle commun du groupe : les N bungalows identiques partagent le mobilier commun, donc
+        # la MÊME variante — choisie d'après le mobilier COMMUN (et non une seule ligne de devis).
+        if n == 1:
+            modele_groupe = run[0][1]
+        else:
+            # Les N bungalows du groupe partagent le mobilier COMMUN -> même variante, choisie
+            # d'après ce mobilier commun (PAS le modèle auto-déduit de la 1re ligne, souvent « vide »
+            # quand le mobilier est listé sous la 2e ligne : sinon le mobilier réparti ne s'afficherait
+            # pas car le modèle « vide » n'a pas de zone mobilier).
+            rep = ArticleDevis(
+                texte_ligne=articles[0].texte_ligne,
+                bloc=articles[0].bloc,
+                est_bungalow=True,
+                mobilier=pooled,
+            )
+            modele_groupe = _variante_bungalow(rep) or run[0][1]
+        # R4 : on n'assemble QUE si le devis porte une ligne d'assemblage pour ce groupe.
+        assembler = n >= 2 and any(a.assemble for a in articles)
+
+        if assembler:
             # 1 état assemblé SANS mobilier (le mobilier commun ne sert qu'au choix kit/classique)…
             plan.etats.append(
                 EtatDesLieux(
-                    modele=_modele_assemble(avec_kitchenette=_kitchenette_seulement(mobilier)),
+                    modele=_modele_assemble(avec_kitchenette=_kitchenette_seulement(pooled)),
                     type_etat="assemble",
                     bloc=bloc,
                     fonction=fonction,
@@ -202,23 +258,23 @@ def construire_plan(extraction: ExtractionDevis) -> PlanGeneration:
                     nom_fichier=nom_fichier(bloc, "assemblé"),
                 )
             )
-            # … + N individuels, chacun avec SON modèle résolu et le mobilier de SA ligne de devis.
+            # … + N individuels, chacun avec SON modèle résolu et sa part du mobilier commun.
             for i in range(1, n + 1):
-                art_i, modele_i = run[i - 1]
                 plan.etats.append(
                     EtatDesLieux(
-                        modele=modele_i,
+                        modele=modele_groupe,
                         type_etat="individuel",
                         bloc=bloc,
                         fonction=fonction,
-                        texte_ligne=art_i.texte_ligne,
+                        texte_ligne=run[i - 1][0].texte_ligne,
                         nb_modules=1,
                         index_module=i,
-                        mobilier=list(art_i.mobilier),
+                        mobilier=parts[i - 1],
+                        climatisation=run[i - 1][0].climatisation,
                         nom_fichier=nom_fichier(bloc, f"individuel {i}"),
                     )
                 )
-        else:
+        elif n == 1:
             # Bloc d'un seul module : 1 état individuel qui porte le mobilier.
             plan.etats.append(
                 EtatDesLieux(
@@ -228,15 +284,65 @@ def construire_plan(extraction: ExtractionDevis) -> PlanGeneration:
                     fonction=fonction,
                     texte_ligne=articles[0].texte_ligne,
                     nb_modules=1,
-                    mobilier=mobilier,
+                    mobilier=parts[0],
+                    climatisation=articles[0].climatisation,
                     nom_fichier=nom_fichier(bloc, "individuel"),
                 )
             )
+        else:
+            # Plusieurs bungalows identiques SANS ligne d'assemblage (R4) : N états INDIVIDUELS
+            # distincts ; le mobilier commun est réparti à parts ÉGALES entre eux (R10).
+            for i in range(1, n + 1):
+                plan.etats.append(
+                    EtatDesLieux(
+                        modele=modele_groupe,
+                        type_etat="individuel",
+                        bloc=bloc,
+                        fonction=fonction,
+                        texte_ligne=run[i - 1][0].texte_ligne,
+                        nb_modules=1,
+                        index_module=i,
+                        mobilier=parts[i - 1],
+                        climatisation=run[i - 1][0].climatisation,
+                        nom_fichier=nom_fichier(bloc, f"individuel {i}"),
+                    )
+                )
         run = []
         run_bloc = None
 
+    def cloturer_wc() -> None:
+        """Émet les états des WC autonomes cumulés, regroupés par paquets de 3 (R2).
+
+        Ex. 6 WC autonomes -> 2 états (3 + 3) ; 4 -> 2 états (3 + 1) ; 1 -> 1 état.
+        `nb_modules` porte le nombre de WC couverts par l'état (1 à 3), pour le remplissage.
+        """
+        nonlocal wc_run, wc_modele
+        if not wc_run:
+            return
+        total = sum(max(1, a.quantite) for a in wc_run)
+        bloc = wc_run[0].bloc
+        texte = wc_run[0].texte_ligne
+        reste = total
+        while reste > 0:
+            n = min(3, reste)
+            plan.etats.append(
+                EtatDesLieux(
+                    modele=wc_modele,
+                    type_etat="sanitaire",
+                    bloc=bloc,
+                    texte_ligne=texte,
+                    nb_modules=n,
+                    mobilier=[],
+                    nom_fichier=nom_fichier(bloc or texte, "sanitaire"),
+                )
+            )
+            reste -= n
+        wc_run = []
+        wc_modele = None
+
     for art, modele, est_bung in resolus:
         if est_bung:
+            cloturer_wc()  # un bungalow interrompt une série de WC autonomes
             # Un bungalow rejoint le run courant si même bloc (et bloc défini), sinon nouveau run.
             if run and art.bloc is not None and art.bloc == run_bloc:
                 run.append((art, modele))
@@ -244,9 +350,19 @@ def construire_plan(extraction: ExtractionDevis) -> PlanGeneration:
                 cloturer_run()
                 run = [(art, modele)]
                 run_bloc = art.bloc
-        else:
-            # Sanitaire / spécial : ferme le run en cours, état autonome avec son modèle.
+        elif _est_wc_autonome(modele):
+            # WC autonomes : on CUMULE les lignes consécutives (même modèle) pour regrouper par 3.
             cloturer_run()
+            if wc_run and modele == wc_modele:
+                wc_run.append(art)
+            else:
+                cloturer_wc()
+                wc_run = [art]
+                wc_modele = modele
+        else:
+            # Autre sanitaire / spécial : ferme les runs en cours, état autonome avec son modèle.
+            cloturer_run()
+            cloturer_wc()
             plan.etats.append(
                 EtatDesLieux(
                     modele=modele,
@@ -260,4 +376,21 @@ def construire_plan(extraction: ExtractionDevis) -> PlanGeneration:
             )
 
     cloturer_run()
+    cloturer_wc()
+
+    # --- Report des options du devis sur les états (élingage global, doses réparties, nb douches) ---
+    entete = extraction.entete
+    for e in plan.etats:
+        if e.type_etat in ("individuel", "assemble"):
+            e.elingage_bas = entete.elingage_point_bas  # R8 : OUI si le devis le précise, NON sinon
+        if "DOUCHE" in normaliser(e.texte_ligne) or "DOUCHE" in normaliser(e.modele):
+            e.nb_douches = _nb_douches(e.texte_ligne)  # R1 : choix onglet 4D/6D
+    # R3 : doses supplémentaires réparties à parts égales entre les états WC autonomes (décision Joris).
+    wc_etats = [e for e in plan.etats if _est_wc_autonome(e.modele)]
+    total_doses = entete.doses_wc_supplementaires or 0
+    if wc_etats and total_doses:
+        base, reste = divmod(total_doses, len(wc_etats))
+        for i, e in enumerate(wc_etats):
+            e.doses = base + (1 if i < reste else 0)
+
     return plan

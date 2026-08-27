@@ -4,6 +4,15 @@
 > autre machine sans perdre le contexte. Voir aussi `README.md` (utilisateur), `HANDOFF.md`
 > (reprise), `DEPLOIEMENT_WINDOWS.md` (serveur), `INTEGRATION_MISTRAL.md` (étude CRM).
 
+> **🔁 PASSATION (26/08/2026).** Le développeur d'origine quitte GB Location. Guide de reprise
+> **humain** au niveau supérieur : `..\PASSATION - COMMENCER ICI.html`. **Lancement = depuis les
+> sources** (plus d'`.exe` : bloqué par l'antivirus) via `Lancer GB - derniere version.vbs`
+> (fixe `GB_DONNEES_DIR` sur le dossier partagé). **Données + clé API** vivent dans
+> `..\GB Etats des lieux - donnees\` (la clé survit au départ). **⚠️ Le travail des 24–26/08
+> (vrais modèles + R1–R10, 179 tests verts, ruff clean) est fonctionnel mais NON COMMITÉ**
+> (WIP sur `main` par-dessus `7daf58f`) — le commiter quand la direction a validé. Health-check
+> de reprise fait le 26/08 : pytest 179 OK, ruff clean, app démarre.
+
 ## But
 Outil interne pour **GB Location** (loueur de modulaires préfabriqués). À partir d'un **devis PDF**,
 l'app reconnaît chaque module, choisit le bon **modèle Excel**, applique la **logique d'assemblage**,

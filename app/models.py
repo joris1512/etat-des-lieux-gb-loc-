@@ -33,6 +33,21 @@ class ArticleDevis(BaseModel):
         description="True si c'est un bungalow 15m2 standard assemblable ; False pour un sanitaire/spécial."
     )
     quantite: int = Field(default=1, description="Quantité de la ligne (en général 1).")
+    assemble: bool = Field(
+        default=False,
+        description=(
+            "True si ce bungalow fait partie d'un ASSEMBLAGE explicite du devis (présence d'une "
+            "ligne « ASSEMBLAGE DES BUNGALOWS » / « ASSEMBLAGE/DESASSEMBLAGE » pour son groupe). "
+            "Deux bungalows identiques qui se suivent ne sont PAS assemblés sans cette ligne."
+        ),
+    )
+    climatisation: bool = Field(
+        default=False,
+        description=(
+            "True si une CLIMATISATION est prévue pour ce bungalow (ligne « OPTION CLIMATISATION » / "
+            "« ACCESSOIRE CLIMATISATION » juste sous le module). Sinon false."
+        ),
+    )
     mobilier: list[MobilierItem] = Field(
         default_factory=list,
         description="Mobilier/équipement gratuit listé sous ce module (tables, chaises, armoires…).",
@@ -77,6 +92,29 @@ class EnteteDevis(BaseModel):
     code_postal: str = Field(default="", description="Code postal du lieu d'utilisation.")
     ville: str | None = Field(default=None, description="Ville du lieu d'utilisation.")
 
+    # --- Options globales du devis (reportées sur les états des lieux) ---
+    elingage_point_bas: bool = Field(
+        default=False,
+        description=(
+            "True si le devis prévoit un ÉLINGAGE POINT BAS (lignes « ELINGAGE POINT BAS ALLER/RETOUR », "
+            "près des lignes de transport). À distinguer de l'élingage point HAUT (à ignorer)."
+        ),
+    )
+    doses_wc_supplementaires: int = Field(
+        default=0,
+        description=(
+            "Nombre total de DOSES SUPPLÉMENTAIRES pour les WC autonomes (ligne « DOSES SUPP. POUR "
+            "WC AUTONOMES »). 0 si absent."
+        ),
+    )
+    branchement: bool = Field(
+        default=False,
+        description=(
+            "True si le devis prévoit un BRANCHEMENT/DÉBRANCHEMENT (des évacuations, à la cuve). "
+            "Sert à cocher la ligne RACCORDS de l'état des lieux cuve."
+        ),
+    )
+
 
 class ExtractionDevis(BaseModel):
     """Résultat structuré complet de la lecture du devis."""
@@ -107,6 +145,17 @@ class EtatDesLieux(BaseModel):
         default=None, description="Rang du module (1..N) pour un individuel issu d'un assemblage."
     )
     mobilier: list[MobilierItem] = Field(default_factory=list)
+    # Options reportées sur l'état des lieux (remplissage) :
+    climatisation: bool | None = Field(
+        default=None, description="Clim du bungalow : True=OUI, False=NON, None=non applicable/inconnu."
+    )
+    elingage_bas: bool = Field(
+        default=False, description="Élingage point bas (option globale du devis) : True=OUI, sinon NON."
+    )
+    doses: int = Field(default=0, description="Doses supplémentaires WC à reporter sur cet état (réparties).")
+    nb_douches: int | None = Field(
+        default=None, description="Nombre de douches (sanitaire douches) — choisit l'onglet 4D/6D."
+    )
     nom_fichier: str = Field(description="Nom du fichier .xlsx produit.")
 
 

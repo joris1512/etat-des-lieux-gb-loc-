@@ -63,18 +63,23 @@ def test_assemble_sans_mobilier_lignes_intactes():
 
 
 def test_salle_reunion_mobilier_sur_individuel():
+    # R10 : le mobilier commun (4 tables, 20 chaises, 1 armoire) est réparti sur les 2 individuels
+    # de la salle de réunion => 2 tables + 10 chaises chacun (l'armoire unique va au premier).
     rapport, job_dir, par_nom = _plan_et_fichiers()
     etat = next(
         e for e in par_nom.values()
         if e.type_etat == "individuel" and e.bloc == "SALLE DE REUNION" and e.mobilier
     )
     a46 = str(_ws(job_dir, etat.nom_fichier)["A46"].value)
-    assert "Tables : 4" in a46
-    assert "Chaises : 20" in a46
+    assert "Tables : 2" in a46
+    assert "Chaises : 10" in a46
     assert "Armoires bureau basses : 1" in a46
 
 
 def test_refectoire_mobilier_sur_individuel_norme_gb():
+    # R10 : le mobilier commun des 2 réfectoires (4 tables, 8 bancs, 2 frigo, 2 micro, 2 évier)
+    # est réparti à parts égales => moitié sur chaque individuel. Variante « kitchenette » choisie
+    # d'après le mobilier COMMUN du groupe.
     rapport, job_dir, par_nom = _plan_et_fichiers()
     etat = next(
         e for e in par_nom.values()
@@ -82,9 +87,14 @@ def test_refectoire_mobilier_sur_individuel_norme_gb():
     )
     assert etat.modele == "bungalow_refectoire_kitchenette.xlsx"
     ws = _ws(job_dir, etat.nom_fichier)
+    # Mobilier général (hors kitchenette) : tables + bancs sur A49-A50.
     contenu = str(ws["A49"].value) + " · " + str(ws["A50"].value)
-    for attendu in ("Tables : 4", "Bancs : 8", "Frigo : 2", "Micro-ondes : 2", "Evier + chauffe-eau : 2"):
-        assert attendu in contenu
+    assert "Tables : 2" in contenu and "Bancs : 4" in contenu
+    # Kitchenette dans ses cases dédiées, quantité du devis (0 si absent).
+    assert ws["A52"].value == "Evier : 1"
+    assert ws["A53"].value == "Chauffe-eau : 1"
+    assert ws["A54"].value == "Micro-ondes : 1"
+    assert ws["A55"].value == "Frigo : 1"
 
 
 def test_aucun_avertissement_mobilier_sur_eiffage():

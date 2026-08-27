@@ -29,7 +29,7 @@ def test_bloc_sans_fonction_renvoie_none():
 
 
 def test_fonction_reportee_sur_chaque_etat_du_bloc():
-    # Deux bungalows REFECTOIRE -> assemblé + 2 individuels, tous en fonction REFECTOIRE.
+    # Deux bungalows REFECTOIRE sans ligne d'assemblage -> 2 individuels, tous en fonction REFECTOIRE.
     arts = [
         ArticleDevis(texte_ligne="BUNGALOW 15m2 BATISO", bloc="REFECTOIRE", est_bungalow=True),
         ArticleDevis(texte_ligne="BUNGALOW 15m2 BATISO", bloc="REFECTOIRE", est_bungalow=True),

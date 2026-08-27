@@ -300,8 +300,37 @@ def _fixer_hauteur(xml: str, row: int, hauteur: float) -> str:
     return f'{xml[: m.start()]}<row r="{row}"{attrs} ht="{hauteur}" customHeight="1">{xml[m.end():]}'
 
 
+def _activer_onglet(items: dict[str, bytes], cible: str, feuille: str | None) -> None:
+    """Rend l'onglet écrit ACTIF à l'ouverture (modèles multi-onglets : douches, container)."""
+    if feuille is None:
+        return
+    wb = items.get("xl/workbook.xml", b"").decode("utf-8")
+    if wb:
+        noms = re.findall(r'<sheet\b[^>]*\bname="([^"]*)"', wb)
+        if feuille in noms:
+            idx = noms.index(feuille)
+            if re.search(r'<workbookView\b[^>]*\bactiveTab="', wb):
+                wb = re.sub(r'(<workbookView\b[^>]*\bactiveTab=")\d+(")', rf"\g<1>{idx}\g<2>", wb, count=1)
+            elif "<workbookView" in wb:
+                wb = re.sub(r"(<workbookView\b)", rf'\1 activeTab="{idx}"', wb, count=1)
+            items["xl/workbook.xml"] = wb.encode("utf-8")
+    # Sélection d'onglet : retirée partout, posée sur la feuille écrite.
+    for nom in list(items):
+        if re.match(r"xl/worksheets/sheet\d+\.xml$", nom):
+            x = items[nom].decode("utf-8")
+            x2 = x.replace(' tabSelected="1"', "")
+            if nom == cible and "<sheetView" in x2 and "tabSelected" not in x2:
+                x2 = re.sub(r"(<sheetView\b)", r'\1 tabSelected="1"', x2, count=1)
+            if x2 != x:
+                items[nom] = x2.encode("utf-8")
+
+
 def ecrire_cellules(
-    modele: Path, sortie: Path, feuille: str | None, valeurs: dict[str, object]
+    modele: Path,
+    sortie: Path,
+    feuille: str | None,
+    valeurs: dict[str, object],
+    hauteur_min_lignes: "set[int] | None" = None,
 ) -> None:
     """Écrit `valeurs` (réf -> valeur) sur `feuille` de `modele`, vers `sortie`, tout préservé.
 
@@ -336,7 +365,13 @@ def ecrire_cellules(
         if besoin > existant:
             xml = _fixer_hauteur(xml, r2, _hauteur_row(xml, r2) + (besoin - existant))
 
+    # Hauteur minimale sur certaines lignes (ex. doses / mise en eau des WC) : lisible à l'impression.
+    for r in hauteur_min_lignes or ():
+        if _hauteur_row(xml, r) < 22:
+            xml = _fixer_hauteur(xml, r, 22)
+
     items[cible] = xml.encode("utf-8")
+    _activer_onglet(items, cible, feuille)
     if styles_xml:
         items["xl/styles.xml"] = styles_xml.encode("utf-8")
     sortie.parent.mkdir(parents=True, exist_ok=True)

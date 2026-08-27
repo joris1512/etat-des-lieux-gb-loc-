@@ -71,6 +71,8 @@ class Reglages(BaseSettings):
     """Variables d'environnement (chargées depuis `.env`)."""
 
     anthropic_api_key: str | None = Field(default=None, validation_alias="ANTHROPIC_API_KEY")
+    # Modèle de LECTURE du devis (extraction). Opus = le plus précis (clim, assemblage, doses).
+    # Surchargeable via GB_MODEL (ex. un modèle plus rapide si la lecture des photos est trop lente).
     modele_extraction: str = Field(default="claude-opus-4-8", validation_alias="GB_MODEL")
 
     # Authentification (optionnelle). Activée si GB_PASSWORD **ou** GB_PASSWORD_HASH est défini.

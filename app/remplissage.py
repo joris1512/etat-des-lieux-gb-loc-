@@ -9,12 +9,14 @@ réserves ou signatures.
 
 from __future__ import annotations
 
+import re
 from functools import lru_cache
 from pathlib import Path
 
 import yaml
+from openpyxl import load_workbook
 
-from app import patch_xlsx
+from app import patch_xlsx, regles_modeles
 from app.config import CONFIG_CELLULES
 from app.correspondance import normaliser
 from app.models import EnteteDevis, EtatDesLieux
@@ -55,6 +57,16 @@ def _cfg_modele(modele: str) -> dict:
     resolu["mobilier_zone"] = (
         surcharge.get("mobilier_zone") or defaut.get("mobilier_zone") or []
     )
+    # R2 : emplacements WC (« V : … ») à garder/effacer selon le nombre de WC de l'état.
+    resolu["wc_emplacements"] = (
+        surcharge.get("wc_emplacements") or defaut.get("wc_emplacements") or []
+    )
+    # Kitchenette (réfectoire) : cases évier/CE/micro/frigo à remplir avec la quantité du devis (0 si absent).
+    resolu["kitchenette"] = surcharge.get("kitchenette") or defaut.get("kitchenette") or []
+    # Lignes dont on garantit une hauteur mini (lisibilité impression, ex. doses / mise en eau).
+    resolu["hauteur_lignes"] = surcharge.get("hauteur_lignes") or defaut.get("hauteur_lignes") or []
+    # Cuve : cellules taille (3m/6m) et raccords (branchement).
+    resolu["cuve"] = surcharge.get("cuve") or {}
     return resolu
 
 
@@ -110,45 +122,102 @@ def remplir_etat(
     cfg = _cfg_modele(etat.modele)
     a_ecrire: dict[str, object] = {}
 
+    # --- Feuille + cellules d'en-tête (cas DOUCHES : onglet 4D/6D + en-tête selon nb_douches, R1) ---
+    feuille = cfg.get("feuille")
+    entete_cellules = dict(cfg.get("entete") or {})
+    if etat.nb_douches:
+        if etat.nb_douches < 5:  # 4 douches -> Petit Sanitaire Douche (en-tête E4/E6)
+            feuille, entete_cellules = "Petit Sanitaire Douche", {"client": "E4", "titre_chantier": "E6"}
+        else:  # 6 douches -> Grand Sanitaire Douche (en-tête E5/E7)
+            feuille, entete_cellules = "Grand Sanitaire Douche", {"client": "E5", "titre_chantier": "E7"}
+    elif "CONTAINER" in normaliser(etat.modele) and "3M" in normaliser(etat.texte_ligne):
+        feuille = "CONTAINER 3m 10pieds"  # container 3m -> onglet 3m (le 6m garde l'onglet par défaut)
+
     # --- En-tête ---
+    # Chantier = intitulé + code postal + VILLE (la ville doit figurer dans la case chantier).
+    chantier = " ".join(x for x in (entete.titre_chantier, entete.code_postal, entete.ville) if x)
     valeurs_entete = {
         "client": entete.client,
-        "titre_chantier": entete.titre_chantier,
+        "titre_chantier": chantier,
         "adresse": entete.adresse,
         "code_postal": entete.code_postal,
         "ville": entete.ville,
         "numero_offre": entete.numero_offre,
     }
     formats = cfg.get("entete_format") or {}
-    for champ, cellule in (cfg.get("entete") or {}).items():
+    for champ, cellule in entete_cellules.items():
         valeur = valeurs_entete.get(champ)
         if valeur and cellule:
-            # Sur les vrais modèles, le libellé fait partie de la cellule (ex. « Client : … ») :
-            # un gabarit « Client : {valeur} » reconstitue le libellé + la valeur.
+            # Sur les vrais modèles, le libellé fait partie de la cellule (ex. « CLIENT : … ») :
+            # un gabarit « CLIENT : {valeur} » reconstitue le libellé + la valeur.
             gabarit = formats.get(champ)
             a_ecrire[cellule] = gabarit.format(valeur=valeur) if gabarit else valeur
 
+    # --- Feuille chargée (lecture) pour les marquages repérés par TEXTE (positions variables) ---
+    wb = load_workbook(modele_path, data_only=True)
+    ws = wb[feuille] if feuille and feuille in wb.sheetnames else wb[wb.sheetnames[0]]
+
     # --- Fonction du bungalow ---
-    # On REMPLACE la ligne « BUREAU / SALLE DE REUNION / VESTIAIRE / REFECTOIRE » par la
-    # fonction retenue (ex. « VESTIAIRE »). Rien n'est écrit si la fonction est indéterminée.
     cellule_fonction = cfg.get("fonction")
     if cellule_fonction and etat.fonction:
+        # Modèle à ligne unique : on écrit la fonction retenue.
         a_ecrire[cellule_fonction] = etat.fonction
+    elif etat.fonction:
+        # R5 : garder la fonction retenue, EFFACER les autres cases de fonction (repérage par texte).
+        for cell in regles_modeles.edits_fonction(ws, etat.fonction):
+            a_ecrire[cell] = " "
 
-    # Modèles à 4 cases séparées (réunion / vestiaire / bureau / réfectoire) : on marque la bonne.
-    cells_fonction = cfg.get("fonctions_cellules") or {}
-    if cells_fonction and etat.fonction and etat.fonction in cells_fonction:
-        a_ecrire[cells_fonction[etat.fonction]] = f"» {etat.fonction} «"
+    # --- Climatisation (R7) / Élingage point bas (R8) : « garder le bon, effacer l'autre » ---
+    if etat.climatisation is not None:
+        a_ecrire.update(regles_modeles.edits_oui_non(ws, "CLIMATISE", etat.climatisation))
+    if etat.type_etat in ("individuel", "assemble"):
+        # On répond toujours OUI/NON sur les modèles qui ont la ligne (sinon dict vide -> rien).
+        a_ecrire.update(regles_modeles.edits_oui_non(ws, "ELINGAGE", etat.elingage_bas))
+
+    # --- WC autonomes : mise en eau (= nb de WC), doses supp (R3), emplacements en trop (R2) ---
+    if cfg.get("wc_emplacements"):
+        # 1 mise en eau par WC de l'état (ex. 3 WC -> 3 mises en eau).
+        a_ecrire.update(regles_modeles.edits_mise_en_eau(ws, etat.nb_modules))
+    if etat.doses:
+        a_ecrire.update(regles_modeles.edits_doses(ws, etat.doses))
+    for cellule in (cfg.get("wc_emplacements") or [])[etat.nb_modules:]:
+        a_ecrire[cellule] = " "  # R2 : effacer les emplacements au-delà du nombre de WC
+
+    # --- Cuve : taille (3m/6m) écrite sur la ligne dédiée + RACCORDS = 1 si branchement au devis ---
+    cuve = cfg.get("cuve") or {}
+    if cuve:
+        m = re.search(r"(\d+)\s*M", normaliser(etat.texte_ligne))
+        if m and cuve.get("taille_cellule"):
+            a_ecrire[cuve["taille_cellule"]] = f"CUVE {m.group(1)} M3"
+        if entete.branchement and cuve.get("raccords_cellule"):
+            cell = cuve["raccords_cellule"]
+            label = str(ws[cell].value or "RACCORDS").strip()
+            a_ecrire[cell] = f"{label} : 1"
 
     # --- Mobilier ---
     non_mappes: list[str] = []
+
+    # 0) Kitchenette (réfectoire) : évier / chauffe-eau / micro-ondes / frigo = quantité du DEVIS
+    #    (0 si absent), au lieu du « 1 » imprimé d'office. Ces articles sortent de la liste mobilier.
+    motifs_kitchenette: list[str] = []
+    for k in cfg.get("kitchenette") or []:
+        motif = normaliser(k.get("motif") or "")
+        qte = sum(m.quantite for m in etat.mobilier if motif and motif in normaliser(m.designation))
+        a_ecrire[k["cellule"]] = f"{k['label']} : {qte}"
+        if motif:
+            motifs_kitchenette.append(motif)
+
+    def _hors_kitchenette(mobilier):
+        return [m for m in mobilier
+                if not any(mo in normaliser(m.designation) for mo in motifs_kitchenette)]
 
     # 1) Zone d'inventaire des VRAIS modèles : la liste COMPLÈTE du devis est reportée telle
     #    quelle (« TABLE MODULAIRE RECT. 160X80 : 4 »), une ligne par cellule disponible ;
     #    s'il y a plus d'articles que de lignes, le reste est regroupé sur la dernière.
     zone = cfg.get("mobilier_zone") or []
-    if zone and etat.mobilier:
-        lignes = _lignes_inventaire(etat.mobilier)
+    mobilier_liste = _hors_kitchenette(etat.mobilier) if motifs_kitchenette else etat.mobilier
+    if zone and mobilier_liste:
+        lignes = _lignes_inventaire(mobilier_liste)
         if len(zone) == 1:
             a_ecrire[zone[0]] = "\n".join(lignes)
         else:
@@ -169,5 +238,8 @@ def remplir_etat(
                 non_mappes.append(item.designation)
         a_ecrire.update(sommes)
 
-    patch_xlsx.ecrire_cellules(modele_path, sortie_path, cfg.get("feuille"), a_ecrire)
+    patch_xlsx.ecrire_cellules(
+        modele_path, sortie_path, feuille, a_ecrire,
+        hauteur_min_lignes=set(cfg.get("hauteur_lignes") or []),
+    )
     return non_mappes

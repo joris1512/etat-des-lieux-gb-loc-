@@ -13,8 +13,10 @@ from app.models import ArticleDevis, EnteteDevis, ExtractionDevis, MobilierItem
 ENTETE = EnteteDevis(client="X", titre_chantier="Y", adresse="", code_postal="")
 
 
-def _bung(texte="BUNGALOW 15M2", bloc=None, mobilier=None):
-    return ArticleDevis(texte_ligne=texte, bloc=bloc, est_bungalow=True, mobilier=mobilier or [])
+def _bung(texte="BUNGALOW 15M2", bloc=None, mobilier=None, assemble=False):
+    return ArticleDevis(
+        texte_ligne=texte, bloc=bloc, est_bungalow=True, mobilier=mobilier or [], assemble=assemble
+    )
 
 
 FRIGO = MobilierItem(designation="ACCESSOIRE REFRIGERATEUR", quantite=1)
@@ -49,10 +51,10 @@ def test_variante_refectoire_et_mobilier():
 
 def test_assemble_kit_si_kitchenette():
     arts = [
-        _bung(bloc="REFECTOIRE"),
-        _bung(bloc="REFECTOIRE", mobilier=[FRIGO]),
-        _bung(bloc="BUREAUX"),
-        _bung(bloc="BUREAUX", mobilier=[TABLE]),
+        _bung(bloc="REFECTOIRE", assemble=True),
+        _bung(bloc="REFECTOIRE", mobilier=[FRIGO], assemble=True),
+        _bung(bloc="BUREAUX", assemble=True),
+        _bung(bloc="BUREAUX", mobilier=[TABLE], assemble=True),
     ]
     plan = construire_plan(ExtractionDevis(entete=ENTETE, articles=arts))
     assembles = {e.bloc: e.modele for e in plan.etats if e.type_etat == "assemble"}

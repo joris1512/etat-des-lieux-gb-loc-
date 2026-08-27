@@ -90,7 +90,9 @@ def main() -> int:
     # Mode « lanceur » : démarre le serveur si besoin, puis ouvre la fenêtre.
     if not _serveur_repond():
         _lancer_serveur_process()
-        for _ in range(80):  # ~20 s max
+        # Attente robuste : jusqu'à ~90 s (1er démarrage depuis le réseau = plus lent).
+        # On n'ouvre la fenêtre qu'une fois le serveur prêt, pour éviter une page blanche.
+        for _ in range(360):
             if _serveur_repond():
                 break
             time.sleep(0.25)

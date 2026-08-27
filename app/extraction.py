@@ -35,19 +35,38 @@ Tu dois remplir l'outil `enregistrer_devis` avec :
    • titre_chantier : le libellé du « Lieu d'Utilisation » (ex. « CHANTIER ETMF / BESSAC »).
    • adresse, code_postal, ville : l'adresse du LIEU D'UTILISATION / chantier
      (ex. « 1 plage des Casernes » / « 40510 » / « SEIGNOSSE »).
+   • elingage_point_bas : true s'il y a une ou des lignes « ELINGAGE POINT BAS » (aller/retour, en
+     général près des lignes de transport). Le « point HAUT » ne compte PAS.
+   • doses_wc_supplementaires : le NOMBRE (quantité) de la ligne « DOSES SUPP. POUR WC AUTONOMES »
+     (0 si absente ; ne pas compter la « mise en eau + 1 dose »).
+   • branchement : true s'il y a une ligne « BRANCHEMENT / DÉBRANCHEMENT DES ÉVACS » (raccordement
+     à la cuve). Sinon false.
    Laisse vide tout champ absent ; n'invente jamais une valeur.
 
-2) articles : la liste, DANS L'ORDRE DU DEVIS, des seuls modules (bungalows et sanitaires).
+2) articles : la liste, DANS L'ORDRE DU DEVIS, de TOUS les modules loués — bungalows, sanitaires, \
+WC, douches, urinoirs, POLYSANI / GRANDS SANITAIRES, CONTENEURS/CONTAINERS, CUVES (de rétention), \
+lave-mains, etc. N'oublie PAS les cuves ni les containers : ce sont des modules à part entière.
    Pour chaque module :
-   - texte_ligne : le texte EXACT de la ligne d'article (ex. « BUNGALOW 15m2 BATISO »).
+   - texte_ligne : le texte EXACT de la ligne d'article (ex. « BUNGALOW 15m2 BATISO »). \
+CAS PARTICULIER « GRANDS SANITAIRES WC » / Polysani : si la description précise « Handi », « PMR » \
+ou « Polysani Handi », AJOUTE « HANDI » au texte_ligne (ex. « GRANDS SANITAIRES WC HANDI ») pour le \
+distinguer du Polysani standard « Hommes/Femmes ».
    - bloc : le libellé de l'unité fonctionnelle à laquelle ce module appartient (les lignes \
 en ** ou *** : VESTIAIRE, REFECTOIRE, 2 BUREAUX INDEPENDANTS, 1 BUREAU INDEPENDANT, 2 BUREAUX, \
 SALLE DE REUNION, GARDIEN, SANITAIRES, H/F WC…). Ce libellé apparaît en général juste sous le \
 groupe de modules qu'il décrit. Les modules consécutifs d'une même unité doivent porter le MÊME \
-libellé de bloc.
-   - est_bungalow : true pour un bungalow 15m2 standard assemblable ; false pour un module \
-sanitaire ou spécial (WC, douches, urinoirs, PMR…).
+libellé de bloc — c'est INDISPENSABLE : deux bungalows identiques qui se suivent sous le même titre \
+DOIVENT avoir EXACTEMENT le même libellé de bloc (sinon leur mobilier commun ne sera pas réparti).
+   - est_bungalow : true pour un bungalow 15m2 standard assemblable ; false pour tout autre module \
+(sanitaire, WC, douches, urinoirs, PMR, polysani, CUVE, CONTAINER…).
    - quantite : la quantité de la ligne (en général 1).
+   - assemble : true UNIQUEMENT si le devis comporte une ligne « ASSEMBLAGE DES BUNGALOWS » / \
+« ASSEMBLAGE/DESASSEMBLAGE » concernant ce groupe de bungalows (ils sont alors physiquement raccordés \
+en un seul ensemble). Sinon false. Deux bungalows identiques qui se suivent ne sont PAS « assemble » \
+sans cette ligne d'assemblage explicite.
+   - climatisation : PAR DÉFAUT false. Ne mets true QUE si une ligne EXPLICITE « OPTION \
+CLIMATISATION » ou « ACCESSOIRE CLIMATISATION » figure pour CE bungalow. En cas de doute : false. \
+N'invente JAMAIS une climatisation.
    - mobilier : le mobilier/équipement listé SOUS ce module (tables, chaises, bancs, armoires, \
 fauteuils, caissons, réfrigérateur, micro-ondes, évier…), avec sa désignation exacte et sa \
 quantité. Quand le mobilier d'un bloc est listé sous le dernier module du bloc, rattache-le à \
@@ -60,6 +79,13 @@ ring, carburant, indexation, PIRL, branchement eau/élec ;
 - l'option climatisation globale (CLIMATISEUR, MONTAGE/DEMONTAGE CLIM) ;
 - toute ligne marquée « annulé » ou « OFFERT » de prestation ;
 - les lignes purement descriptives (INCLUS, plans, mentions d'assurance, CGV…).
+
+Note importante : certaines lignes ne sont PAS des modules (ne crée pas d'article), mais leur présence
+renseigne des champs :
+- « ASSEMBLAGE / DÉSASSEMBLAGE des bungalows » -> `assemble = true` sur les bungalows du groupe ;
+- « OPTION / ACCESSOIRE CLIMATISATION » -> `climatisation = true` sur le bungalow juste au-dessus ;
+- « ELINGAGE POINT BAS » -> `elingage_point_bas = true` (en-tête) ;
+- « DOSES SUPP. POUR WC AUTONOMES » -> `doses_wc_supplementaires` (en-tête, le nombre).
 
 N'invente rien. Si une information d'en-tête manque, laisse le champ vide.
 """
