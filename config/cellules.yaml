@@ -194,9 +194,16 @@ modeles:
     mobilier: {}
   # --- Sanitaires EIFFAGE : ENCORE sur modèles factices (modèle réel à choisir + brancher) ---
   sanitaire_2wc_2d_2u.xlsx:
-    # Un sanitaire n'a pas de mobilier de bureau : on ne reporte que l'en-tête.
+    # 2 WC / 2 douches / 2 urinoirs = GRAND SANITAIRE MIXTE (vrai modèle client).
+    feuille: "Grand Sanitaire Mixte"
+    entete: {client: E5, titre_chantier: E7}
+    entete_format: {client: "CLIENT : {valeur}", titre_chantier: "CHANTIER : {valeur}"}
     mobilier: {}
   sanitaire_2wc_pmr.xlsx:
+    # Bloc 2 WC dont PMR = vrai modèle client « BLOC 2WCH » (onglet 2WCH).
+    feuille: "2WCH"
+    entete: {client: E5, titre_chantier: E7}
+    entete_format: {client: "CLIENT : {valeur}", titre_chantier: "CHANTIER : {valeur}"}
     mobilier: {}
   # --- Conteneur 6 m maritime : VRAI modèle (onglet avec perspectives), en-tête E5/E7 ---
   container_6m.xlsx:

@@ -168,8 +168,10 @@ def remplir_etat(
             a_ecrire[cell] = " "
 
     # --- Climatisation (R7) / Élingage point bas (R8) : « garder le bon, effacer l'autre » ---
-    if etat.climatisation is not None:
-        a_ecrire.update(regles_modeles.edits_oui_non(ws, "CLIMATISE", etat.climatisation))
+    # Clim : on tranche TOUJOURS (mentionnée au devis -> OUI, sinon -> NON) — jamais les deux à la
+    # fois. « inconnu/non applicable » (None, ex. sanitaire) = pas de clim -> NON. (edits_oui_non
+    # ne fait rien si le modèle n'a pas de ligne CLIMATISE.)
+    a_ecrire.update(regles_modeles.edits_oui_non(ws, "CLIMATISE", bool(etat.climatisation)))
     if etat.type_etat in ("individuel", "assemble"):
         # On répond toujours OUI/NON sur les modèles qui ont la ligne (sinon dict vide -> rien).
         a_ecrire.update(regles_modeles.edits_oui_non(ws, "ELINGAGE", etat.elingage_bas))
