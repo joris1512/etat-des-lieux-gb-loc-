@@ -54,6 +54,27 @@ from app.securite import (
 
 logger = logging.getLogger("uvicorn.error")
 
+
+def _erreur_lisible(exc: Exception, defaut: str) -> str:
+    """Message d'erreur clair pour un utilisateur non-informaticien.
+
+    Le détail technique est journalisé côté serveur ; on ne montre à l'écran qu'une phrase
+    compréhensible, avec l'action à mener quand c'est possible. `defaut` = repli propre au contexte.
+    """
+    logger.warning("Erreur remontée à l'utilisateur : %s: %s", type(exc).__name__, exc)
+    t = f"{type(exc).__name__} {exc}".lower()
+    if "api_key" in t or "api key" in t or "x-api-key" in t or "anthropic_api_key" in t:
+        return "La clé d'accès à l'IA est absente ou invalide — prévenez l'administrateur (réglage de la clé)."
+    if "authentication" in t or " 401" in t or "unauthorized" in t:
+        return "La clé d'accès à l'IA n'est pas valide — prévenez l'administrateur."
+    if "rate" in t or " 429" in t or "quota" in t or "overloaded" in t or "credit" in t:
+        return "Le service d'IA est saturé ou le quota est atteint — réessayez dans quelques minutes."
+    if any(m in t for m in ("getaddrinfo", "connection", "timed out", "timeout", "unreachable", "resolve", "network", "ssl")):
+        return "Connexion au service impossible (réseau ou internet) — vérifiez la connexion, puis réessayez."
+    if "smtp" in t or "mail" in t:
+        return "Problème d'envoi d'e-mail — vérifiez la configuration e-mail (serveur SMTP) et l'adresse."
+    return defaut
+
 def migrer_donnees_programme(racine=None, donnees=None, runtime=None) -> None:
     """Récupère les données d'une ANCIENNE installation (stockées dans le dossier programme)
     vers le dossier de données séparé — sans jamais écraser des données déjà migrées."""
@@ -274,7 +295,10 @@ async def analyser_endpoint(
     try:
         extraction = analyser(pdf_bytes, utiliser_fixture=utiliser_fixture)
     except Exception as exc:
-        raise HTTPException(status_code=422, detail=f"Lecture du devis impossible : {exc}") from exc
+        raise HTTPException(
+            status_code=422,
+            detail=_erreur_lisible(exc, "La lecture du devis n'a pas pu aboutir — vérifiez que le fichier est un devis PDF lisible, puis réessayez."),
+        ) from exc
     # Pré-remplit le modèle déduit de chaque module (que l'utilisateur pourra corriger dans l'UI).
     for art in extraction.articles:
         if art.modele is None:
@@ -475,7 +499,10 @@ def smtp_test(request: Request, corps: dict) -> dict:  # def : envoi SMTP bloqua
             "Ceci est un message de test : la configuration e-mail fonctionne.\n",
         )
     except Exception as exc:  # noqa: BLE001 — remonter la cause exacte à l'écran
-        raise HTTPException(status_code=502, detail=f"Échec de l'envoi : {exc}") from exc
+        raise HTTPException(
+            status_code=502,
+            detail=_erreur_lisible(exc, "L'e-mail n'a pas pu être envoyé — vérifiez la configuration e-mail (serveur SMTP) et l'adresse du destinataire."),
+        ) from exc
     return {"ok": True}
 
 
@@ -1107,7 +1134,10 @@ def constat_envoyer(job_id: str, nom: str, corps: dict, request: Request) -> dic
             pieces=[pdf],
         )
     except Exception as exc:  # noqa: BLE001 — remonter la cause exacte à l'écran
-        raise HTTPException(status_code=502, detail=f"Échec de l'envoi : {exc}") from exc
+        raise HTTPException(
+            status_code=502,
+            detail=_erreur_lisible(exc, "L'e-mail n'a pas pu être envoyé — vérifiez la configuration e-mail (serveur SMTP) et l'adresse du destinataire."),
+        ) from exc
     db.journaliser(
         "envoi",
         f"Constat envoyé : {nom} → {destinataire} par {utilisateur_courant(request)}",
