@@ -383,8 +383,11 @@ def construire_plan(extraction: ExtractionDevis) -> PlanGeneration:
     for e in plan.etats:
         if e.type_etat in ("individuel", "assemble"):
             e.elingage_bas = entete.elingage_point_bas  # R8 : OUI si le devis le précise, NON sinon
-        if "DOUCHE" in normaliser(e.texte_ligne) or "DOUCHE" in normaliser(e.modele):
-            e.nb_douches = _nb_douches(e.texte_ligne)  # R1 : choix onglet 4D/6D
+        # R1 : choix onglet 4D/6D — UNIQUEMENT pour le vrai modèle douches (douches.xlsx).
+        # (Ne pas se fier au mot « DOUCHE » dans le texte : un sanitaire mixte « 1WC 1 DOUCHE 1
+        #  URINOIR » n'est PAS un modèle douches et forcerait un onglet inexistant -> état manquant.)
+        if "DOUCHE" in normaliser(e.modele):
+            e.nb_douches = _nb_douches(e.texte_ligne)
     # R3 : doses supplémentaires réparties à parts égales entre les états WC autonomes (décision Joris).
     wc_etats = [e for e in plan.etats if _est_wc_autonome(e.modele)]
     total_doses = entete.doses_wc_supplementaires or 0

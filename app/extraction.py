@@ -106,7 +106,8 @@ def _appel_anthropic(pdf_bytes: bytes) -> dict:
 
     reponse = client.messages.create(
         model=reglages.modele_extraction,
-        max_tokens=8000,
+        max_tokens=16000,  # relevé pour les gros devis (évite une lecture tronquée)
+        temperature=0,  # lecture = recopie déterministe (pas de variabilité d'un run à l'autre)
         system=SYSTEME,
         tools=[
             {
@@ -136,6 +137,14 @@ def _appel_anthropic(pdf_bytes: bytes) -> dict:
             }
         ],
     )
+
+    # Garde-fou : si la réponse a été coupée (limite de longueur), l'extraction est INCOMPLÈTE
+    # (des modules peuvent manquer sans erreur). On refuse plutôt que de produire un document faux.
+    if getattr(reponse, "stop_reason", None) == "max_tokens":
+        raise RuntimeError(
+            "Le devis est trop volumineux : la lecture a été tronquée et des modules ont pu être "
+            "omis. Traitez le devis en deux fois, ou prévenez l'administrateur."
+        )
 
     for bloc in reponse.content:
         if getattr(bloc, "type", None) == "tool_use" and bloc.name == NOM_OUTIL:
