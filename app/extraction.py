@@ -107,7 +107,6 @@ def _appel_anthropic(pdf_bytes: bytes) -> dict:
     reponse = client.messages.create(
         model=reglages.modele_extraction,
         max_tokens=16000,  # relevé pour les gros devis (évite une lecture tronquée)
-        temperature=0,  # lecture = recopie déterministe (pas de variabilité d'un run à l'autre)
         system=SYSTEME,
         tools=[
             {
