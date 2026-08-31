@@ -285,11 +285,15 @@ modeles:
     feuille: "Polysani H"
     entete: {client: E5, titre_chantier: E7}
     entete_format: {client: "CLIENT : {valeur}", titre_chantier: "CHANTIER : {valeur}"}
+    # titre_contenu (règle Joris) : réécrit le titre du bloc (A6) avec le contenu réel lu sur la
+    # ligne du devis (ex. « 5WC / 3UR »), au lieu du texte figé du modèle.
+    titre_contenu: {cellule: A6, gabarit: "Sanitaire : {contenu} (POLYSANI HANDI)"}
     mobilier: {}
   polysani_homme_femme.xlsx:
     feuille: "Polysani Homme-Femme"
     entete: {client: D5, titre_chantier: D7}
     entete_format: {client: "CLIENT : {valeur}", titre_chantier: "CHANTIER : {valeur}"}
+    titre_contenu: {cellule: A6, gabarit: "Sanitaire : BLOC {contenu} (POLYSANI)"}
     mobilier: {}
   cuve.xlsx:
     feuille: "Feuil1"

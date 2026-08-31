@@ -67,6 +67,9 @@ def _cfg_modele(modele: str) -> dict:
     resolu["hauteur_lignes"] = surcharge.get("hauteur_lignes") or defaut.get("hauteur_lignes") or []
     # Cuve : cellules taille (3m/6m) et raccords (branchement).
     resolu["cuve"] = surcharge.get("cuve") or {}
+    # Titre du bloc (règle Joris) : cellule + gabarit pour réécrire le titre avec le contenu réel
+    # du bloc lu au devis (ex. polysani : A6 « Sanitaire : BLOC 5WC / 3UR (POLYSANI) »).
+    resolu["titre_contenu"] = surcharge.get("titre_contenu") or defaut.get("titre_contenu") or {}
     return resolu
 
 
@@ -112,6 +115,30 @@ def _cellule_mobilier(designation: str, table: dict[str, str]) -> str | None:
     return None
 
 
+def resumer_contenu_bloc(texte: str) -> str:
+    """Décrit le contenu réel d'un bloc sanitaire lu sur la ligne du devis, au format des modèles
+    GB (« 5WC / 3UR / 4 PTS EAU »). Sert à réécrire le titre de l'état des lieux (règle Joris).
+    Renvoie "" si rien n'est reconnu (dans ce cas on garde le titre figé du modèle)."""
+    t = normaliser(texte or "")
+
+    def _n(motif: str) -> int:
+        m = re.search(motif, t)
+        return int(m.group(1)) if m else 0
+
+    parties: list[str] = []
+    if wc := _n(r"(\d+)\s*WC\b"):
+        parties.append(f"{wc}WC")
+    if ur := _n(r"(\d+)\s*URIN"):
+        parties.append(f"{ur}UR")
+    if douches := _n(r"(\d+)\s*DOUCHE"):
+        parties.append(f"{douches} DOUCHES")
+    if lavabos := _n(r"(\d+)\s*(?:LAVABO|LAVE\s*MAIN)"):
+        parties.append(f"{lavabos} LAVABOS")
+    if pts_eau := _n(r"(\d+)\s*(?:PTS?|POINTS?)\s*(?:D\s*)?EAU"):
+        parties.append(f"{pts_eau} PTS EAU")
+    return " / ".join(parties)
+
+
 def remplir_etat(
     modele_path: Path,
     sortie_path: Path,
@@ -152,6 +179,15 @@ def remplir_etat(
             # un gabarit « CLIENT : {valeur} » reconstitue le libellé + la valeur.
             gabarit = formats.get(champ)
             a_ecrire[cellule] = gabarit.format(valeur=valeur) if gabarit else valeur
+
+    # --- Titre du bloc (règle Joris) : réécrire la cellule-titre (ex. A6 des polysani) avec le
+    #     contenu RÉEL lu sur la ligne du devis (« 5WC / 3UR »), à la place du texte figé du modèle. ---
+    titre = cfg.get("titre_contenu") or {}
+    if titre.get("cellule"):
+        contenu = resumer_contenu_bloc(etat.texte_ligne)
+        if contenu:
+            gabarit = titre.get("gabarit") or "{contenu}"
+            a_ecrire[titre["cellule"]] = gabarit.format(contenu=contenu)
 
     # --- Feuille chargée (lecture) pour les marquages repérés par TEXTE (positions variables) ---
     wb = load_workbook(modele_path, data_only=True)

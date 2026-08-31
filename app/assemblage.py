@@ -111,6 +111,18 @@ def _nb_douches(texte: str) -> int | None:
     return int(m.group(1)) if m else None
 
 
+def _nb_wc(texte: str) -> int:
+    """Nombre de WC lu sur la ligne (« 5WC », « 5 WC »). 0 si absent."""
+    m = re.search(r"(\d+)\s*WC\b", normaliser(texte or ""))
+    return int(m.group(1)) if m else 0
+
+
+def _nb_urinoirs(texte: str) -> int:
+    """Nombre d'urinoirs lu sur la ligne (« 3 URINOIRS », « 3 URIN »). 0 si absent."""
+    m = re.search(r"(\d+)\s*URIN", normaliser(texte or ""))
+    return int(m.group(1)) if m else 0
+
+
 def _est_bungalow_modele(modele: str, defaut: bool) -> bool:
     """Devine si un modèle choisi est un bungalow (pour la logique d'assemblage)."""
     m = (modele or "").lower()
@@ -128,6 +140,12 @@ def resoudre_modele(art: ArticleDevis) -> tuple[str, bool] | None:
     """
     if art.modele:  # choix manuel de l'utilisateur
         return art.modele, _est_bungalow_modele(art.modele, art.est_bungalow)
+    txt = normaliser(art.texte_ligne)
+    # Règle métier (Joris) : un GROS sanitaire collectif — plus de 3 WC ET au moins 3 urinoirs — est
+    # un POLYSANI (homme-femme, ou handi si « HANDI »). Prioritaire (sinon un motif « N URINOIRS »
+    # matcherait à tort), SAUF si le devis dit explicitement « GRAND SANITAIRE MIXTE » (autre modèle).
+    if "GRAND SANITAIRE MIXTE" not in txt and _nb_wc(art.texte_ligne) > 3 and _nb_urinoirs(art.texte_ligne) >= 3:
+        return ("polysani_handi.xlsx" if "HANDI" in txt else "polysani_homme_femme.xlsx"), False
     entree = trouver_modele(art.texte_ligne)
     if entree is None:
         return None
