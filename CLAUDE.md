@@ -4,6 +4,18 @@
 > autre machine sans perdre le contexte. Voir aussi `README.md` (utilisateur), `HANDOFF.md`
 > (reprise), `DEPLOIEMENT_WINDOWS.md` (serveur), `INTEGRATION_MISTRAL.md` (étude CRM).
 
+> **🚨 PRIORITÉ N°1 DU REPRENEUR — HÉBERGEMENT CENTRAL (lire en premier).** Le **2026-08-31**, la
+> base partagée `gb.db` a été **VIDÉE** (perte de TOUS les clients + comptes) à cause d'un **accès
+> SIMULTANÉ de plusieurs postes** au fichier SQLite sur le partage réseau — la fragilité connue de
+> SQLite-sur-SMB (voir « Pièges connus » v2.5.1). Restaurée depuis la **copie OneDrive**
+> (`%OneDrive%\Sauvegardes GB Etats des lieux\gb-2026-08-28.zip`, 60 clients + comptes CB/CBO/RI).
+> **⚠️ TANT QUE L'APPLI TOURNE EN « FICHIER PARTAGÉ » : NE JAMAIS l'ouvrir sur 2 postes EN MÊME
+> TEMPS (risque de re-perte) ; NE JAMAIS lancer un serveur de test sur les VRAIES données pendant
+> qu'un autre poste peut y accéder ; NE JAMAIS retirer la copie de sauvegarde OneDrive.**
+> **➡️ VRAIE SOLUTION = basculer sur l'HÉBERGEMENT WEB** (kit prêt : `deploy/` + `docs/DEPLOIEMENT_VPS.md`,
+> ~quelques heures) : une seule base, tout le monde via un lien, plus aucun risque de concurrence.
+> C'est aussi ce qui débloque l'espace chauffeurs (accès mobile). **À faire en priorité.**
+
 > **🔁 PASSATION (26/08/2026).** Le développeur d'origine quitte GB Location. Guide de reprise
 > **humain** au niveau supérieur : `..\PASSATION - COMMENCER ICI.html`. **Lancement = depuis les
 > sources** (plus d'`.exe` : bloqué par l'antivirus) via `Lancer GB - derniere version.vbs`
