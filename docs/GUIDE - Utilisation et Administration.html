@@ -1,0 +1,187 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Guide GB États des lieux</title>
+<style>
+  :root{
+    --bg:#f6f7f9; --card:#ffffff; --ink:#1c2430; --muted:#5b6675; --line:#e3e7ec;
+    --brand:#0f5b4e; --brand2:#12796a;
+    --ok-bg:#eaf6ee; --ok-line:#8fca9f; --ok-ink:#1d6b34;
+    --warn-bg:#fff6e8; --warn-line:#e6b45a; --warn-ink:#7a4e00;
+    --info-bg:#eef2fb; --info-line:#9db4e6; --info-ink:#284a86;
+    --soon-bg:#f3ecfb; --soon-line:#c3a6e6; --soon-ink:#5a2d8a;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--ink);
+    font-family:"Segoe UI",Roboto,Helvetica,Arial,sans-serif;line-height:1.6;font-size:16px}
+  .wrap{max-width:900px;margin:0 auto;padding:26px 20px 90px}
+  header.top{background:linear-gradient(135deg,var(--brand),var(--brand2));color:#fff;
+    border-radius:16px;padding:26px 28px;box-shadow:0 6px 24px rgba(15,91,78,.18)}
+  header.top .kick{text-transform:uppercase;letter-spacing:.14em;font-size:12px;opacity:.85;margin:0 0 6px}
+  header.top h1{margin:0;font-size:27px;line-height:1.2}
+  header.top p{margin:10px 0 0;opacity:.95}
+  h2{font-size:21px;margin:34px 0 12px;padding-top:10px;border-top:2px solid var(--line)}
+  h2 .ic{margin-right:8px}
+  h3{font-size:17px;margin:18px 0 6px}
+  .muted{color:var(--muted)}
+  .card{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:16px 18px;margin:12px 0}
+  code{background:#eef1f4;border:1px solid var(--line);border-radius:5px;padding:1px 6px;
+    font-family:Consolas,"Courier New",monospace;font-size:.9em}
+  pre{background:#0f1720;color:#e6edf3;border-radius:10px;padding:12px 15px;overflow-x:auto;
+    font-family:Consolas,"Courier New",monospace;font-size:13.5px}
+  ul,ol{margin:8px 0;padding-left:22px}li{margin:5px 0}
+  .box{border-radius:12px;padding:14px 16px;margin:14px 0;border:1px solid}
+  .ok{background:var(--ok-bg);border-color:var(--ok-line);color:#173}
+  .warn{background:var(--warn-bg);border-color:var(--warn-line);color:var(--warn-ink)}
+  .info{background:var(--info-bg);border-color:var(--info-line);color:var(--info-ink)}
+  .soon{background:var(--soon-bg);border-color:var(--soon-line);color:var(--soon-ink)}
+  table{border-collapse:collapse;width:100%;margin:10px 0;font-size:15px}
+  th,td{border:1px solid var(--line);padding:8px 10px;text-align:left;vertical-align:top}
+  th{background:#eef2f1}
+  .toc{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:14px 18px;margin:18px 0}
+  .toc ol{margin:6px 0 0;columns:2;column-gap:28px}
+  .toc a{color:var(--brand2);text-decoration:none}.toc a:hover{text-decoration:underline}
+  .step{display:flex;gap:12px;margin:10px 0}
+  .step .n{flex:0 0 auto;width:28px;height:28px;border-radius:50%;background:var(--brand);color:#fff;
+    display:flex;align-items:center;justify-content:center;font-weight:700;font-size:14px}
+  .pill{display:inline-block;font-size:12px;font-weight:700;padding:2px 9px;border-radius:999px}
+  .p-admin{background:#fde8e8;color:#8a2018}.p-tous{background:var(--ok-bg);color:var(--ok-ink)}
+  footer{margin-top:40px;color:var(--muted);font-size:13px;text-align:center}
+  @media(max-width:600px){.toc ol{columns:1}}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <header class="top">
+    <p class="kick">Guide d'utilisation &amp; d'administration</p>
+    <h1>GB Location — Application « États des lieux »</h1>
+    <p>Comment ouvrir l'application, s'en servir au quotidien, gérer les comptes et les mots de passe, l'installer sur un poste, et à quoi servira l'espace chauffeurs.</p>
+  </header>
+
+  <div class="toc">
+    <b>Sommaire</b>
+    <ol>
+      <li><a href="#c1">L'application en bref</a></li>
+      <li><a href="#c2">Ouvrir &amp; se connecter</a></li>
+      <li><a href="#c3">Générer un état des lieux</a></li>
+      <li><a href="#c4">Administration : comptes &amp; mots de passe</a></li>
+      <li><a href="#c5">Installer sur un nouveau poste</a></li>
+      <li><a href="#c6">🚚 L'espace chauffeurs (à venir)</a></li>
+      <li><a href="#c7">En cas de souci</a></li>
+    </ol>
+  </div>
+
+  <!-- 1 -->
+  <h2 id="c1"><span class="ic">📋</span>1. L'application en bref</h2>
+  <div class="card">
+    <p>À partir d'un <b>devis PDF</b>, l'application lit le devis, reconnaît chaque module (bungalow, sanitaire, container…), choisit le bon <b>modèle Excel</b> et <b>pré-remplit les états des lieux</b> (un fichier par état + un ZIP). Elle garde aussi la mémoire des <b>clients, chantiers et devis</b>.</p>
+    <p class="muted">C'est un outil <b>interne</b>, qui tourne <b>sur votre serveur / vos postes</b> — rien n'est public sur internet.</p>
+  </div>
+
+  <!-- 2 -->
+  <h2 id="c2"><span class="ic">🔑</span>2. Ouvrir l'application &amp; se connecter <span class="pill p-tous">tout le monde</span></h2>
+  <div class="card">
+    <div class="step"><div class="n">1</div><div>Sur le Bureau, double-cliquez sur <b>« GB Etats des lieux »</b>. Une fenêtre s'ouvre.</div></div>
+    <div class="step"><div class="n">2</div><div>Une <b>page de connexion</b> s'affiche : entrez votre <b>identifiant</b> et votre <b>mot de passe</b>.</div></div>
+    <div class="step"><div class="n">3</div><div>Vous voilà sur le tableau de bord. <span class="muted">Vous restez connecté 7 jours (pas besoin de retaper le mot de passe chaque matin).</span></div></div>
+    <div class="box info">Chaque personne a <b>son propre compte</b> (c'est l'administrateur qui les crée — voir §4). Les identifiants ne se partagent pas : ça permet de savoir qui a fait quoi.</div>
+  </div>
+
+  <!-- 3 -->
+  <h2 id="c3"><span class="ic">⚡</span>3. Générer un état des lieux <span class="pill p-tous">commerciaux</span></h2>
+  <div class="card">
+    <div class="step"><div class="n">1</div><div>Menu <b>« Générer »</b> → <b>déposez le devis PDF</b> (glisser-déposer ou cliquer pour parcourir).</div></div>
+    <div class="step"><div class="n">2</div><div>Cliquez <b>« Analyser le devis »</b>. L'application lit le devis et propose une reconnaissance de chaque module.</div></div>
+    <div class="step"><div class="n">3</div><div><b>Vérifiez / corrigez</b> : pour chaque ligne, vous pouvez changer le <b>modèle</b> au menu déroulant si besoin (ex. un grand sanitaire qui a plein de configurations), ajuster le mobilier, exclure une ligne.</div></div>
+    <div class="step"><div class="n">4</div><div>Cliquez <b>« Générer »</b> → vous obtenez <b>un Excel par état + un ZIP</b> à télécharger.</div></div>
+    <div class="box ok">Astuce : l'application <b>apprend</b>. Si vous corrigez un modèle, elle s'en souviendra pour les prochains devis similaires. Retrouvez tout dans <b>« Historique »</b> et <b>« Clients »</b>.</div>
+  </div>
+
+  <!-- 4 -->
+  <h2 id="c4"><span class="ic">👥</span>4. Administration : comptes &amp; mots de passe <span class="pill p-admin">administrateur</span></h2>
+  <div class="card">
+    <p>Réservé aux comptes <b>administrateur</b>. Menu <b>« Administration »</b> (en bas à gauche).</p>
+
+    <h3>Créer un compte (un commercial, un chauffeur…)</h3>
+    <div class="step"><div class="n">1</div><div>Administration → carte <b>« Nouveau compte »</b>.</div></div>
+    <div class="step"><div class="n">2</div><div>Renseignez : <b>Identifiant</b> (ex. <code>j.dupont</code>), <b>Nom affiché</b>, <b>Mot de passe</b> (8 caractères minimum), et le <b>Rôle</b>.</div></div>
+    <div class="step"><div class="n">3</div><div>Validez → le compte apparaît dans la liste <b>« Comptes »</b>.</div></div>
+
+    <h3>Changer un mot de passe / désactiver un compte</h3>
+    <p>Dans la liste <b>« Comptes »</b>, à côté de chaque personne :</p>
+    <ul>
+      <li>bouton <b>« Mot de passe »</b> → définir un nouveau mot de passe (utile si quelqu'un l'a oublié) ;</li>
+      <li>possibilité de <b>désactiver</b> un compte (ex. un salarié qui part) sans le supprimer.</li>
+    </ul>
+    <div class="box warn"><b>Sécurité :</b> l'application <b>empêche de désactiver le dernier administrateur</b> (pour ne jamais se retrouver enfermé dehors). Gardez toujours <b>au moins 2 comptes admin</b> par prudence. Les mots de passe sont stockés <b>chiffrés</b> (jamais en clair).</div>
+
+    <h3>Les 3 rôles</h3>
+    <table>
+      <tr><th>Rôle</th><th>Peut faire</th></tr>
+      <tr><td><b>administrateur</b></td><td>Tout : générer, gérer les clients, <b>gérer les comptes &amp; mots de passe</b>, réglages (société, logo, e-mail).</td></tr>
+      <tr><td><b>utilisateur</b> (commercial / bureau)</td><td>Générer les états des lieux, consulter clients / chantiers / historique. Pas d'accès à l'administration.</td></tr>
+      <tr><td><b>chauffeur</b></td><td>Uniquement <b>ses constats</b> sur le terrain (voir §6). Accès très limité.</td></tr>
+    </table>
+  </div>
+
+  <!-- 5 -->
+  <h2 id="c5"><span class="ic">💻</span>5. Installer sur un nouveau poste</h2>
+  <div class="card">
+    <p>L'application et les données vivent déjà sur le <b>serveur bureautique</b>. Pour l'utiliser depuis un <b>autre ordinateur</b> du réseau, il faut une petite mise en place <b>une seule fois</b> (≈ 15 min) — <span class="muted">idéalement par votre informaticien, ou avec l'aide de Claude</span> :</p>
+    <div class="step"><div class="n">1</div><div>Installer <b>Python 3.12</b> (gratuit) sur le poste.</div></div>
+    <div class="step"><div class="n">2</div><div>Récupérer le code (déjà sauvegardé en ligne sur GitHub, ou copié depuis le serveur).</div></div>
+    <div class="step"><div class="n">3</div><div>Créer l'environnement (2 commandes) :
+      <pre>py -3.12 -m venv .venv
+.venv\Scripts\pip install -r requirements.txt</pre></div></div>
+    <div class="step"><div class="n">4</div><div>Créer un <b>raccourci Bureau</b> qui lance l'application (l'outil <code>Creer un raccourci Bureau.bat</code> le fait). Les données restent celles du serveur (mêmes clients, même connexion).</div></div>
+    <div class="box info">💡 <b>Le plus simple pour reprendre le projet :</b> ouvrir <b>Claude</b> (ou une autre IA) directement dans le dossier de l'application. Le fichier <code>CLAUDE.md</code> contient tout le contexte : l'IA comprend le projet et peut faire l'installation ou les évolutions.</div>
+  </div>
+
+  <!-- 6 -->
+  <h2 id="c6"><span class="ic">🚚</span>6. L'espace chauffeurs <span class="pill" style="background:var(--soon-bg);color:var(--soon-ink)">prochaine étape à brancher</span></h2>
+  <div class="card">
+    <p><b>Ce que c'est :</b> un espace pensé pour les <b>chauffeurs sur le chantier</b>, depuis leur <b>téléphone</b>. Il est <b>déjà développé dans l'application</b> — il reste juste à le <b>mettre en service</b>.</p>
+    <h3>Ce que le chauffeur pourra faire</h3>
+    <ul>
+      <li>Retrouver le <b>client</b> et le <b>chantier</b>, ouvrir l'état des lieux du module.</li>
+      <li>Faire le <b>constat en 2 temps</b> : <b>Début de location</b> (départ) et <b>Fin de location</b> (retour).</li>
+      <li>Pour chaque partie du module : cocher <b>Bon / Sale / Cassé</b> + une note.</li>
+      <li>Prendre des <b>photos</b> (compressées automatiquement pour la 4G) et faire <b>signer le client</b> du doigt — la signature s'insère directement dans le fichier Excel.</li>
+      <li>Envoyer la <b>copie signée par e-mail</b> au client depuis le chantier.</li>
+      <li>Installer l'appli sur le téléphone comme une vraie application (« Ajouter à l'écran d'accueil »).</li>
+    </ul>
+    <div class="box soon">
+      <b>Ce qu'il reste à faire pour l'activer :</b> l'espace chauffeurs fonctionne depuis un téléphone <b>en 4G</b>, donc l'application doit être <b>accessible en ligne</b> (mise sur un petit serveur web sécurisé). Une fois en ligne :
+      <ol style="margin:8px 0 0">
+        <li>dans <b>Administration → « Accès à distance »</b>, on renseigne l'adresse de l'application ;</li>
+        <li>un <b>QR code</b> apparaît ; les chauffeurs le scannent avec leur téléphone ;</li>
+        <li>ils se connectent avec leur compte <b>chauffeur</b> et c'est prêt.</li>
+      </ol>
+      <div class="muted" style="margin-top:8px">Tout est déjà prévu côté application (le rôle chauffeur, le mode constat, le QR, la configuration e-mail). La marche à suivre technique pour la mise en ligne est documentée pour votre informaticien.</div>
+    </div>
+  </div>
+
+  <!-- 7 -->
+  <h2 id="c7"><span class="ic">🛟</span>7. En cas de souci</h2>
+  <div class="card">
+    <table>
+      <tr><th>Problème</th><th>Que faire</th></tr>
+      <tr><td>La fenêtre ne s'ouvre pas / affiche une vieille version</td><td>Fermez <b>toutes</b> les fenêtres de l'application, puis relancez par le raccourci Bureau.</td></tr>
+      <tr><td>« Lecture du devis impossible »</td><td>Vérifiez que le fichier est bien un <b>PDF lisible</b>. Réessayez. Si ça persiste, prévenez le support (ça peut venir de la clé de lecture IA ou d'internet).</td></tr>
+      <tr><td>Mot de passe oublié</td><td>Un <b>administrateur</b> le réinitialise dans Administration → Comptes → « Mot de passe ».</td></tr>
+      <tr><td>Un document sort avec le mauvais modèle</td><td>Dans l'écran de vérification, changez le modèle au <b>menu déroulant</b> avant de générer.</td></tr>
+    </table>
+    <div class="box ok"><b>Sauvegardes :</b> vos données sont sauvegardées chaque jour (base + photos), avec une copie automatique sur OneDrive. Le code de l'application est sauvegardé sur GitHub. Rien n'est perdu.</div>
+  </div>
+
+  <footer>
+    GB Location — Application « États des lieux » · Guide utilisation &amp; administration.<br>
+    Pour une évolution ou un dépannage technique : ouvrir Claude dans le dossier de l'application (il lit <code>CLAUDE.md</code>).
+  </footer>
+
+</div>
+</body>
+</html>
