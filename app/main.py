@@ -177,6 +177,27 @@ app = FastAPI(
     lifespan=_lifespan,
 )
 
+
+@app.exception_handler(Exception)
+async def _journaliser_erreur(request: Request, exc: Exception) -> Response:
+    """Toute erreur non gérée : trace complète dans runtime/logs/erreurs.log (diagnostic multi-poste)
+    + message lisible renvoyé (au lieu d'un « Internal Server Error » opaque)."""
+    import traceback
+    from datetime import datetime
+
+    try:
+        dossier = RUNTIME_DIR / "logs"
+        dossier.mkdir(parents=True, exist_ok=True)
+        with open(dossier / "erreurs.log", "a", encoding="utf-8") as f:
+            poste = os.environ.get("COMPUTERNAME", "?")
+            f.write(f"\n[{datetime.now():%Y-%m-%d %H:%M:%S}] poste={poste} {request.method} {request.url.path}\n")
+            f.write(traceback.format_exc())
+    except Exception:  # noqa: BLE001 — la journalisation ne doit jamais masquer l'erreur d'origine
+        pass
+    return JSONResponse(
+        {"detail": f"Erreur interne : {type(exc).__name__}: {exc}"}, status_code=500
+    )
+
 # Plafond de taille de requête (devis PDF / modèles .xlsx) — borne la mémoire avant bufférisation.
 MAX_BODY = 25 * 1024 * 1024  # 25 Mo
 
