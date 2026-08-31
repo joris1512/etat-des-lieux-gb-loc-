@@ -39,6 +39,24 @@
 > + `Lancer GB (tous postes).vbs` créés mais **pywebview n'affiche pas** en embeddable → raccourci
 > resté sur le lanceur venv d'origine (fenêtre OK sur CE PC).
 
+> **🛠️ Session 2026-08-31 (dernier jour du dev d'origine) — HEAD `df5d514` sur `main`, poussé, 193 tests
+> verts, ruff clean.** (1) **Incident perte de données** (voir bannière priorité en tête) : base partagée
+> vidée par accès 2 postes → **restaurée depuis OneDrive** (60 clients + comptes). (2) **2 règles métier
+> polysani** (commit `df5d514`, tests `tests/test_regle_polysani.py` + `tests/test_titre_bloc.py`) :
+> **(a)** `app/assemblage.py` `resoudre_modele` → si **>3 WC ET ≥3 urinoirs** = polysani (handi si « HANDI »),
+> règle **prioritaire** (corrige le faux match « N URINOIRS » quand la ligne dit « 4 PTS EAU »), **sauf**
+> « GRAND SANITAIRE MIXTE » explicite ; choix manuel toujours prioritaire (helpers `_nb_wc`/`_nb_urinoirs`).
+> **(b)** `app/remplissage.py` `resumer_contenu_bloc` réécrit la cellule-titre **A6** des polysani
+> (« Sanitaire : BLOC 5WC / 3UR / 4 PTS EAU (POLYSANI) ») avec le contenu réel lu au devis ; piloté par la
+> clé `titre_contenu:{cellule,gabarit}` de `config/cellules.yaml` (⚠️ `_cfg_modele` = **liste blanche de
+> clés** → toute nouvelle clé de config doit y être ajoutée). (3) **✅ Dépôt GitHub distant EN PLACE**
+> (corrige le « reste : dépôt distant » du 27/08) : `origin` = `github.com/joris1512/etat-des-lieux-gb-loc-`,
+> `main` poussé. (4) **Installeur multi-poste** : `..\INSTALLATION - nouveau poste\_moteur.ps1` (crée un
+> venv local par PC + raccourci), testé. (5) **`P:\Joris` rangé** : dossier « Joris » imbriqué (doublons,
+> ≈178 Mo) supprimé ; panneau `..\A LIRE EN PREMIER - Ou aller.txt` ajouté. **⚠️ Validation métier = pytest
+> sur COPIES uniquement, JAMAIS de serveur sur les vraies données (cf. incident).** **Reste** : PRIORITÉ N°1
+> hébergement central (bannière en tête) ; espace chauffeurs ; droits d'accès dossier données.
+
 ## But
 Outil interne pour **GB Location** (loueur de modulaires préfabriqués). À partir d'un **devis PDF**,
 l'app reconnaît chaque module, choisit le bon **modèle Excel**, applique la **logique d'assemblage**,
